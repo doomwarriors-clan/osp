@@ -2421,6 +2421,7 @@ void CheckVote( void ) {
 	osp_voteType = 0;
 	level.voteTime = 0;
 	trap_SetConfigstring( CS_VOTE_TIME, "" );
+	trap_SetConfigstring( CS_VOTE_STRING, "" );	// otherwise the last vote text stays in every later gamestate
 
 }
 

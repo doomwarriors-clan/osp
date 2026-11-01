@@ -727,8 +727,8 @@ void ClientUserinfoChanged( int clientNum ) {
 	char	headModel[MAX_QPATH];
 	char	oldname[MAX_STRING_CHARS];
 	gclient_t	*client;
-	char	c1[MAX_INFO_STRING];
-	char	c2[MAX_INFO_STRING];
+	char	c1[16];		// the client reads at most 4 characters; bounded so a long value cannot bloat CS_PLAYERS
+	char	c2[16];
 	char	userinfo[MAX_INFO_STRING];
 
 	ent = g_entities + clientNum;
@@ -883,8 +883,8 @@ void ClientUserinfoChanged( int clientNum ) {
 	client->pers.teamInfo = ( !*s || atoi( s ) != 0 );
 
 	// colors
-	strcpy( c1, Info_ValueForKey( userinfo, Info_ValueForKey( userinfo, "color1" ) ? "color1" : "color" ) );
-	strcpy( c2, Info_ValueForKey( userinfo, "color2" ) );
+	Q_strncpyz( c1, Info_ValueForKey( userinfo, Info_ValueForKey( userinfo, "color1" ) ? "color1" : "color" ), sizeof( c1 ) );
+	Q_strncpyz( c2, Info_ValueForKey( userinfo, "color2" ), sizeof( c2 ) );
 
 	// send over a subset of the userinfo keys so other clients can
 	// print scoreboards, display models, and play custom sounds

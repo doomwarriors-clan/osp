@@ -1334,7 +1334,10 @@ qboolean Cmd_CallVote_f( gentity_t *ent, qboolean fRefCommand ) {
 	trap_Argv( 2, arg2, sizeof( arg2 ) );
 	trap_Argv( 3, arg3, sizeof( arg3 ) );
 
-	if( strchr( arg1, ';' ) || strchr( arg2, ';' ) ) {
+	// no vote argument is legitimately longer than a map or player name; longer ones only
+	// serve to overflow or to flood everyone with oversized vote strings
+	if( strchr( arg1, ';' ) || strchr( arg2, ';' ) || strchr( arg3, ';' ) ||
+		strlen( arg1 ) >= 32 || strlen( arg2 ) >= MAX_QPATH || strlen( arg3 ) >= MAX_QPATH ) {
 		if ( !fRefCommand && !ent->client->sess.referee ) {
 			trap_SendServerCommand( ent-g_entities, "print \"Invalid vote string!\n\"" );
 		} else {
