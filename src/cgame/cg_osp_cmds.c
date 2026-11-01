@@ -276,15 +276,13 @@ void CG_OSPClientRecord( void ) {
 	fileHandle_t	f = 0;
 	char			name[MAX_OSPATH];
 	char			fname[MAX_OSPATH];
-	int				i;
 	int				count = 0;
 
 	trap_Args( name, sizeof( name ) );
 	name[MAX_OSPATH - 1] = 0;
-	i = strlen( name ) - 1;
-	while ( name[i] == ' ' ) {
-		name[i] = 0;
-		i--;
+	if ( !CG_OSPSafeFileName( name, MAX_QPATH - 1 ) ) {
+		CG_Printf( "^3Ignored server file name: ^7%s\n", name );
+		return;
 	}
 	do {
 		if ( f ) {
@@ -307,15 +305,13 @@ void CG_OSPClientScreenshot( void ) {
 	fileHandle_t	f;
 	char			name[MAX_OSPATH];
 	char			fname[MAX_OSPATH];
-	int				i;
 	int				count;
 
 	trap_Args( name, sizeof( name ) );
 	name[MAX_OSPATH - 1] = 0;
-	i = strlen( name ) - 1;
-	while ( name[i] == ' ' ) {
-		name[i] = 0;
-		i--;
+	if ( !CG_OSPSafeFileName( name, MAX_QPATH - 1 ) ) {
+		CG_Printf( "^3Ignored server file name: ^7%s\n", name );
+		return;
 	}
 	count = 0;
 	f = 0;
