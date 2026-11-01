@@ -823,6 +823,10 @@ static void CG_ServerCommand( void ) {
 
 		trap_Argv( 1, buf, sizeof( buf ) );
 		cg.mvCurrent = atoi( buf );
+		// indexes cg.mvClientNums[] in the multiview sound and draw code
+		if ( cg.mvCurrent < 0 || cg.mvCurrent >= cg.mvActive ) {
+			cg.mvCurrent = 0;
+		}
 		if ( oldView != cg.mvCurrent ) {
 			CG_OSPPlaySound( NULL, 0, trap_S_RegisterSound( "sound/misc/menu2.wav", qfalse ) );
 		}

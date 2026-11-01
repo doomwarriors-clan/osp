@@ -466,12 +466,21 @@ void CG_OSPParseViewList( void ) {
 	int i;
 	int oldCount = cg.mvActive;
 
+	// count and client numbers come from the server: clamp the count to the window table
+	// (and to what the command carries) and reject client numbers outside the client table
 	cg.mvActive = atoi( CG_Argv( 1 ) );
+	if ( cg.mvActive < 0 || cg.mvActive > sizeof( cg.mvClientNums ) / sizeof( cg.mvClientNums[0] ) || cg.mvActive + 2 > trap_Argc() ) {
+		cg.mvActive = 0;
+	}
 	for ( i = 0; i < cg.mvActive; i++ ) {
 		cg.mvClientNums[i] = atoi( CG_Argv( i + 2 ) );
+		if ( cg.mvClientNums[i] < 0 || cg.mvClientNums[i] >= MAX_CLIENTS ) {
+			cg.mvActive = 0;
+			break;
+		}
 	}
 	CG_RegisterItemVisuals( 6 );
-	if ( cg.mvActive != 0 && ( cg.mvCurrent < 0 || cg.mvCurrent > cg.mvActive ) ) {
+	if ( cg.mvActive == 0 || cg.mvCurrent < 0 || cg.mvCurrent >= cg.mvActive ) {
 		cg.mvCurrent = 0;
 	}
 	cg.osp_unk_1e964 = 0;
