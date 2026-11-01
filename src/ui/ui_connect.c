@@ -135,7 +135,9 @@ static void UI_DisplayDownloadInfo( const char *downloadName ) {
 		UI_ReadableSize( xferRateBuf, sizeof xferRateBuf, xferRate );
 
 		// Extrapolate estimated completion time
-		if (downloadSize && xferRate) {
+		// downloadSize is announced by the server: below 1024 the divisor (downloadSize/1024)
+		// is zero and the integer division would abort the client
+		if (downloadSize >= 1024 && xferRate) {
 			int n = downloadSize / xferRate; // estimated time for entire d/l in secs
 
 			// We do it in K (/1024) because we'd overflow around 4MB
