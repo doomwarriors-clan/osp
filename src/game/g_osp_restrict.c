@@ -374,8 +374,8 @@ void OSP_LoadFilters( void ) {
 		G_Printf( "*** Player filters DISABLED.\n\n" );
 		return;
 	}
-	if ( len > sizeof( buf ) ) {
-		G_Printf( "\nPlayer filter file \"%s\" too big! (file_size: %d, max_size: %d)\n", filename, len, sizeof( buf ) );
+	if ( len >= sizeof( buf ) ) {	// one byte is needed for the terminating NUL
+		G_Printf( "\nPlayer filter file \"%s\" too big! (file_size: %d, max_size: %d)\n", filename, len, sizeof( buf ) - 1 );
 		G_Printf( "*** Player filters DISABLED.\n\n" );
 		trap_FS_FCloseFile( f );
 		return;

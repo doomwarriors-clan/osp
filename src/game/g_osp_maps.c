@@ -302,8 +302,10 @@ void OSP_LoadMaplist( void ) {
 		G_Printf( "\nERROR: Could not open maps list file \"%s\" (%d, %d)\n\n", filename, len, f );
 		return;
 	}
-	if ( !numFiles && len > sizeof( buf ) ) {
-		G_Printf( "\nMap file \"%s\" too big!  Maplist not loaded!! (file_size: %d, max_size: %d)\n", filename, len, sizeof( buf ) );
+	// the size check must not depend on the .bsp auto-list: the file is read into a fixed
+	// buffer whatever else was found (and the terminating NUL needs one byte of room)
+	if ( f && len >= sizeof( buf ) ) {
+		G_Printf( "\nMap file \"%s\" too big!  Maplist not loaded!! (file_size: %d, max_size: %d)\n", filename, len, sizeof( buf ) - 1 );
 		trap_FS_FCloseFile( f );
 		return;
 	}
