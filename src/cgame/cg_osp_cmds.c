@@ -751,6 +751,10 @@ void CG_OSPPrintXStats( void ) {
 
 	clientNum = atoi( CG_Argv( idx++ ) );
 	weaponMask = atoi( CG_Argv( idx++ ) );
+	// the client number comes from the server
+	if ( clientNum < 0 || clientNum >= MAX_CLIENTS ) {
+		return;
+	}
 	Q_strncpyz( name, cgs.clientinfo[clientNum].name, sizeof( name ) );
 	CG_OSPStatsNameCopy( cgs.clientinfo[clientNum].name, name, sizeof( name ) );
 	CG_Printf( "%s", va( "\n^7Accuracy info for: ^3%s^7\n\n", name ) );
@@ -868,7 +872,8 @@ void CG_OSPAstats( qboolean top ) {
 
 	count = atoi( CG_Argv( idx++ ) );
 	best = atoi( CG_Argv( idx++ ) );
-	if ( !count ) {
+	// the count comes from the server: no more entries than players, nor than arguments
+	if ( count <= 0 || count > MAX_CLIENTS || idx + count * 5 > trap_Argc() ) {
 		return;
 	}
 	CG_Printf( "\n^3  Acc Hits/Atts Kills Deaths\n" );
@@ -888,6 +893,9 @@ void CG_OSPAstats( qboolean top ) {
 		atts = atoi( CG_Argv( idx++ ) ) & cgs.stats_mask;
 		kills = atoi( CG_Argv( idx++ ) );
 		deaths = atoi( CG_Argv( idx++ ) );
+		if ( clientNum < 0 || clientNum >= MAX_CLIENTS ) {
+			continue;
+		}
 		acc = ( atts > 0 ) ? 100 * hits / (float)atts : 0;
 		color = ( ( top ? acc : best + 0.999f ) >= ( top ? best : acc ) ) ? "^3" : "^7";
 		CG_OSPStatsNameCopy( cgs.clientinfo[clientNum].name, name, 30 );
@@ -923,6 +931,10 @@ void CG_OSPBstats( qboolean top ) {
 		atts = atoi( CG_Argv( idx++ ) ) & cgs.stats_mask;
 		kills = atoi( CG_Argv( idx++ ) );
 		deaths = atoi( CG_Argv( idx++ ) );
+		// weapon and client number come from the server
+		if ( weapon < 0 || weapon >= 10 || clientNum < 0 || clientNum >= MAX_CLIENTS || idx > trap_Argc() ) {
+			break;
+		}
 		acc = ( atts > 0 ) ? 100 * hits / (float)atts : 0;
 		CG_OSPStatsNameCopy( cgs.clientinfo[clientNum].name, name, 30 );
 		CG_Printf( "%s", va( "^3%s ^7%5.1f ^5%4d/%-4d ^2%5d ^1%6d ^7%s\n", weaponShortNames[weapon], acc, hits, atts, kills, deaths, name ) );
