@@ -1380,7 +1380,9 @@ static void CG_BreathPuffs( centity_t *cent, refEntity_t *head) {
 	vec3_t up, origin;
 	int contents;
 
-	ci = &cgs.clientinfo[ cent->currentState.number ];
+	// clientNum, not the entity number: CG_Player has range-checked clientNum, while
+	// number is any entity slot (0..1023) and would index past cgs.clientinfo[]
+	ci = &cgs.clientinfo[ cent->currentState.clientNum ];
 
 	if (!cg_enableBreath.integer) {
 		return;
