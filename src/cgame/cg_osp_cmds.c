@@ -753,7 +753,7 @@ void CG_OSPPrintXStats( void ) {
 	weaponMask = atoi( CG_Argv( idx++ ) );
 	Q_strncpyz( name, cgs.clientinfo[clientNum].name, sizeof( name ) );
 	CG_OSPStatsNameCopy( cgs.clientinfo[clientNum].name, name, sizeof( name ) );
-	CG_Printf( va( "\n^7Accuracy info for: ^3%s^7\n\n", name ) );
+	CG_Printf( "%s", va( "\n^7Accuracy info for: ^3%s^7\n\n", name ) );
 	CG_Printf( "Weapon        Accrcy Hits/Atts Kills Deaths Pickup Drops\n" );
 	CG_Printf( "--------------------------------------------------------\n" );
 	if ( !weaponMask ) {
@@ -770,9 +770,9 @@ void CG_OSPPrintXStats( void ) {
 				atts = atoi( CG_Argv( idx++ ) );
 				kills = atoi( CG_Argv( idx++ ) );
 				deaths = atoi( CG_Argv( idx++ ) );
-				CG_Printf( va( "^3%-12s: ", weaponNames[i] ) );
+				CG_Printf( "%s", va( "^3%-12s: ", weaponNames[i] ) );
 				if ( ( atts & cgs.stats_mask ) || ( hits & cgs.stats_mask ) ) {
-					CG_Printf( va( "^7%6.1f ^5%4d/%-4d ", !( atts & cgs.stats_mask ) ? 0 : 100 * ( hits & cgs.stats_mask ) / (float)( atts & cgs.stats_mask ),
+					CG_Printf( "%s", va( "^7%6.1f ^5%4d/%-4d ", !( atts & cgs.stats_mask ) ? 0 : 100 * ( hits & cgs.stats_mask ) / (float)( atts & cgs.stats_mask ),
 						hits & cgs.stats_mask, atts & cgs.stats_mask ) );
 					damageActivity = qtrue;
 				} else {
@@ -782,9 +782,9 @@ void CG_OSPPrintXStats( void ) {
 					}
 				}
 				if ( i > 2 ) {
-					CG_Printf( va( "^2%5d ^1%6d ^3%6d ^1%5d\n", kills, deaths, atts >> cgs.stats_shift, hits >> cgs.stats_shift ) );
+					CG_Printf( "%s", va( "^2%5d ^1%6d ^3%6d ^1%5d\n", kills, deaths, atts >> cgs.stats_shift, hits >> cgs.stats_shift ) );
 				} else {
-					CG_Printf( va( "^2%5d ^1%6d\n", kills, deaths ) );
+					CG_Printf( "%s", va( "^2%5d ^1%6d\n", kills, deaths ) );
 				}
 			}
 		}
@@ -891,7 +891,7 @@ void CG_OSPAstats( qboolean top ) {
 		acc = ( atts > 0 ) ? 100 * hits / (float)atts : 0;
 		color = ( ( top ? acc : best + 0.999f ) >= ( top ? best : acc ) ) ? "^3" : "^7";
 		CG_OSPStatsNameCopy( cgs.clientinfo[clientNum].name, name, 30 );
-		CG_Printf( va( "%s%5.1f ^5%4d/%-4d ^2%5d ^1%6d %s%s\n", color, acc, hits, atts, kills, deaths, color, name ) );
+		CG_Printf( "%s", va( "%s%5.1f ^5%4d/%-4d ^2%5d ^1%6d %s%s\n", color, acc, hits, atts, kills, deaths, color, name ) );
 	}
 	CG_Printf( "\n\n" );
 }
@@ -925,7 +925,7 @@ void CG_OSPBstats( qboolean top ) {
 		deaths = atoi( CG_Argv( idx++ ) );
 		acc = ( atts > 0 ) ? 100 * hits / (float)atts : 0;
 		CG_OSPStatsNameCopy( cgs.clientinfo[clientNum].name, name, 30 );
-		CG_Printf( va( "^3%s ^7%5.1f ^5%4d/%-4d ^2%5d ^1%6d ^7%s\n", weaponShortNames[weapon], acc, hits, atts, kills, deaths, name ) );
+		CG_Printf( "%s", va( "^3%s ^7%5.1f ^5%4d/%-4d ^2%5d ^1%6d ^7%s\n", weaponShortNames[weapon], acc, hits, atts, kills, deaths, name ) );
 		weapon = atoi( CG_Argv( idx++ ) );
 	}
 	CG_Printf( "\n\n" );
