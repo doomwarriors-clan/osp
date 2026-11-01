@@ -93,6 +93,11 @@ void TossClientItems( gentity_t *self ) {
 		if ( self->client->ps.weaponstate == WEAPON_DROPPING ) {
 			weapon = self->client->pers.cmd.weapon;
 		}
+		// cmd.weapon comes straight from the client: reject anything outside the weapon
+		// table before it is used as a shift count or an index
+		if ( weapon <= WP_NONE || weapon >= WP_NUM_WEAPONS ) {
+			weapon = WP_NONE;
+		}
 		if ( !( self->client->ps.stats[STAT_WEAPONS] & ( 1 << weapon ) ) ) {
 			weapon = WP_NONE;
 		}
