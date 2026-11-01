@@ -709,11 +709,12 @@ void CG_RegisterWeapon( int weaponNum ) {
 	vec3_t			mins, maxs;
 	int				i;
 
-	weaponInfo = &cg_weapons[weaponNum];
-
-	if ( weaponNum == 0 ) {
+	// weapon numbers from entity / player state are not trusted: nothing outside the
+	// weapon table is registered (cg_weapons has MAX_WEAPONS entries)
+	if ( weaponNum <= 0 || weaponNum >= WP_NUM_WEAPONS ) {
 		return;
 	}
+	weaponInfo = &cg_weapons[weaponNum];
 
 	if ( weaponInfo->registered ) {
 		return;
@@ -952,7 +953,11 @@ void CG_RegisterItemVisuals( int itemNum ) {
 	itemInfo_t		*itemInfo;
 	gitem_t			*item;
 
-	// OSP: no itemNum range check
+	// the index can come from the server (STAT_HOLDABLE_ITEM, item entities): id's range
+	// check restored, as a plain return rather than an error the server could trigger
+	if ( itemNum < 0 || itemNum >= bg_numItems ) {
+		return;
+	}
 	itemInfo = &cg_items[ itemNum ];
 	if ( itemInfo->registered ) {
 		return;
@@ -960,7 +965,7 @@ void CG_RegisterItemVisuals( int itemNum ) {
 
 	item = &bg_itemlist[ itemNum ];
 
-	memset( itemInfo, 0, sizeof( &itemInfo ) );
+	memset( itemInfo, 0, sizeof( *itemInfo ) );
 	itemInfo->registered = qtrue;
 
 	itemInfo->models[0] = trap_R_RegisterModel( item->world_model[0] );

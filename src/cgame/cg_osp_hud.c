@@ -622,7 +622,7 @@ float CG_OSPDrawHoldableItem( float y ) {
 	int		value;
 
 	value = cg.snap->ps.stats[STAT_HOLDABLE_ITEM];
-	if ( value ) {
+	if ( value > 0 && value < bg_numItems ) {
 		CG_RegisterItemVisuals( value );
 		y -= 48.0f;
 		CG_DrawPic( 592, y, 48, 48, cg_items[value].icon );
