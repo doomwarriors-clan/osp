@@ -99,7 +99,7 @@ void QDECL BotAI_Print(int type, char *fmt, ...) {
 	// OSP: bot messages only with bot_developer
 	if (bot_developer.integer) {
 		va_start(ap, fmt);
-		vsprintf(str, fmt, ap);
+		Q_vsnprintf(str, sizeof(str), fmt, ap);
 		va_end(ap);
 
 		switch(type) {

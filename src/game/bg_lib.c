@@ -1041,7 +1041,11 @@ double fabs( double x ) {
 #define is_digit(c)		((unsigned)to_digit(c) <= 9)
 #define to_char(n)		((n) + '0')
 
-void AddInt( char **buf_p, int val, int width, int flags ) {
+// bounded output for Q_vsnprintf: end points at the byte reserved for the terminating NUL,
+// nothing is ever written at or past it
+#define BG_PUTC( buf, end, c )	do { if ( !( end ) || ( buf ) < ( end ) ) { *( buf )++ = ( c ); } } while ( 0 )
+
+void AddInt( char **buf_p, char *end, int val, int width, int flags ) {
 	char	text[32];
 	int		digits;
 	int		signedVal;
@@ -1065,19 +1069,19 @@ void AddInt( char **buf_p, int val, int width, int flags ) {
 
 	if( !( flags & LADJUST ) ) {
 		while ( digits < width ) {
-			*buf++ = ( flags & ZEROPAD ) ? '0' : ' ';
+			BG_PUTC( buf, end, ( flags & ZEROPAD ) ? '0' : ' ' );
 			width--;
 		}
 	}
 
 	while ( digits-- ) {
-		*buf++ = text[digits];
+		BG_PUTC( buf, end, text[digits] );
 		width--;
 	}
 
 	if( flags & LADJUST ) {
 		while ( width-- > 0 ) {	// OSP tests > 0
-			*buf++ = ( flags & ZEROPAD ) ? '0' : ' ';
+			BG_PUTC( buf, end, ( flags & ZEROPAD ) ? '0' : ' ' );
 		}
 	}
 
@@ -1085,7 +1089,7 @@ void AddInt( char **buf_p, int val, int width, int flags ) {
 }
 
 // OSP's AddFloat (fixed-point: scales by 10^prec, pads with flags)
-void AddFloat( char **buf_p, float fval, int width, int prec, int flags ) {
+void AddFloat( char **buf_p, char *end, float fval, int width, int prec, int flags ) {
 	char	text[32];
 	int		digits;
 	float	signedVal;
@@ -1124,12 +1128,12 @@ void AddFloat( char **buf_p, float fval, int width, int prec, int flags ) {
 	buf = *buf_p;
 
 	while ( digits < width ) {
-		*buf++ = ( flags & ZEROPAD ) ? '0' : ' ';
+		BG_PUTC( buf, end, ( flags & ZEROPAD ) ? '0' : ' ' );
 		width--;
 	}
 
 	while ( digits-- ) {
-		*buf++ = text[digits];
+		BG_PUTC( buf, end, text[digits] );
 	}
 
 	*buf_p = buf;
@@ -1138,7 +1142,7 @@ void AddFloat( char **buf_p, float fval, int width, int prec, int flags ) {
 
 // OSP's AddString; with flag 4 the width/precision count printable
 // characters only (color escapes are copied but not counted)
-void AddString( char **buf_p, char *string, int width, int prec, int flags ) {
+void AddString( char **buf_p, char *end, char *string, int width, int prec, int flags ) {
 	register char	*buf;	// register: matches OSP's frame layout
 	int		size;
 	int		len;
@@ -1183,10 +1187,10 @@ void AddString( char **buf_p, char *string, int width, int prec, int flags ) {
 
 		while ( len ) {
 			if ( Q_IsColorString( string ) ) {
-				*buf++ = *string++;
-				*buf++ = *string++;
+				BG_PUTC( buf, end, *string++ );
+				BG_PUTC( buf, end, *string++ );
 			} else {
-				*buf++ = *string++;
+				BG_PUTC( buf, end, *string++ );
 				len--;
 			}
 		}
@@ -1205,26 +1209,26 @@ void AddString( char **buf_p, char *string, int width, int prec, int flags ) {
 		width -= size;
 
 		while( size-- ) {
-			*buf++ = *string++;
+			BG_PUTC( buf, end, *string++ );
 		}
 	}
 
 	while( width-- > 0 ) {
-		*buf++ = ' ';
+		BG_PUTC( buf, end, ' ' );
 	}
 
 	*buf_p = buf;
 }
 
 /*
-vsprintf
+BG_vsnprintfCore (the formatter behind Q_vsnprintf)
 
 I'm not going to support a bunch of the more arcane stuff in here
 just to keep it simpler.  For example, the '*' and '$' are not
 currently supported.  I've tried to make it so that it will just
 parse and ignore formats we don't support.
 */
-int vsprintf( char *buffer, const char *fmt, va_list argptr ) {
+static int BG_vsnprintfCore( char *buffer, char *end, const char *fmt, va_list argptr ) {
 	int		*arg;
 	char	*buf_p;
 	char	ch;
@@ -1240,7 +1244,7 @@ int vsprintf( char *buffer, const char *fmt, va_list argptr ) {
 	while( qtrue ) {
 		// run through the format string until we hit a '%' or '\0'
 		for ( ch = *fmt; (ch = *fmt) != '\0' && ch != '%'; fmt++ ) {
-			*buf_p++ = ch;
+			BG_PUTC( buf_p, end, ch );
 		}
 		if ( ch == '\0' ) {
 			goto done;
@@ -1289,16 +1293,16 @@ reswitch:
 			width = n;
 			goto reswitch;
 		case 'c':
-			*buf_p++ = (char)*arg;
+			BG_PUTC( buf_p, end, (char)*arg );
 			arg++;
 			break;
 		case 'd':
 		case 'i':
-			AddInt( &buf_p, *arg, width, flags );
+			AddInt( &buf_p, end, *arg, width, flags );
 			arg++;
 			break;
 		case 'f':
-			AddFloat( &buf_p, *(double *)arg, width, prec, flags );
+			AddFloat( &buf_p, end, *(double *)arg, width, prec, flags );
 #ifdef __LCC__
 			arg += 1;	// everything is 32 bit in my compiler
 #else
@@ -1306,14 +1310,14 @@ reswitch:
 #endif
 			break;
 		case 's':
-			AddString( &buf_p, (char *)*arg, width, prec, flags );
+			AddString( &buf_p, end, (char *)*arg, width, prec, flags );
 			arg++;
 			break;
 		case '%':
-			*buf_p++ = ch;
+			BG_PUTC( buf_p, end, ch );
 			break;
 		default:
-			*buf_p++ = (char)*arg;
+			BG_PUTC( buf_p, end, (char)*arg );
 			arg++;
 			break;
 		}
@@ -1322,6 +1326,21 @@ reswitch:
 done:
 	*buf_p = 0;
 	return buf_p - buffer;
+}
+
+/*
+==================
+Q_vsnprintf
+
+Formats at most size - 1 characters into buffer and always NUL-terminates it (size > 0).
+Returns the number of characters written (not counting the NUL).
+==================
+*/
+int Q_vsnprintf( char *buffer, int size, const char *fmt, va_list argptr ) {
+	if ( size <= 0 ) {
+		return 0;
+	}
+	return BG_vsnprintfCore( buffer, buffer + size - 1, fmt, argptr );
 }
 
 /* this is really crappy */
