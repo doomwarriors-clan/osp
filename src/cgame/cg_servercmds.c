@@ -286,11 +286,18 @@ void CG_ShaderStateChanged(void) {
 	while (o && *o) {
 		n = strstr(o, "=");
 		if (n && *n) {
+			// the lengths come from the configstring: never longer than the buffers
+			if (n-o >= sizeof(originalShader)) {
+				break;
+			}
 			strncpy(originalShader, o, n-o);
 			originalShader[n-o] = 0;
 			n++;
 			t = strstr(n, ":");
 			if (t && *t) {
+				if (t-n >= sizeof(newShader)) {
+					break;
+				}
 				strncpy(newShader, n, t-n);
 				newShader[t-n] = 0;
 			} else {
@@ -299,6 +306,9 @@ void CG_ShaderStateChanged(void) {
 			t++;
 			o = strstr(t, "@");
 			if (o) {
+				if (o-t >= sizeof(timeOffset)) {
+					break;
+				}
 				strncpy(timeOffset, t, o-t);
 				timeOffset[o-t] = 0;
 				o++;
