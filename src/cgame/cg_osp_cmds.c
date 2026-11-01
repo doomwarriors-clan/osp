@@ -21,7 +21,6 @@ int			hudStyle = 0;
 int			statsInfo[22];
 int			actionKeyDown[12];
 
-static void CG_OSPStuffUnquote( const char *in, int len, char *out );
 
 // +action<n>: releases action key n and executes the cvar "action<n>up"
 void CG_OSPActionUp_f( void ) {
@@ -128,29 +127,147 @@ void CG_OSPClientAuth_f( void ) {
 	trap_SendClientCommand( va( "htuatneilc %s", str ) );
 }
 
-// stuff <cmd> (server command): executes a console command from the server ('' -> ', ' -> ");
-// demo playback skips screenshot / g_synchronous / clear / currenttime / stoprecord
-void CG_ServerCommandStuff( void ) {
-	char	cmd[MAX_STRING_CHARS];
-	char	out[MAX_STRING_CHARS];
+// a demo / screenshot name sent by the server: trims blanks and refuses anything that could
+// break out of a quoted console argument, expand a cvar or leave the target directory
+static qboolean CG_OSPSafeFileName( char *name, int maxLen ) {
+	char	*p;
+	int		len;
 
-	trap_Args( cmd, MAX_STRING_CHARS );
-	cmd[MAX_STRING_CHARS - 1] = 0;
-	CG_OSPStuffUnquote( cmd, strlen( cmd ), out );
-	if ( cg.demoPlayback ) {
-		if ( strstr( out, "screenshot" ) == out ) {
+	while ( *name == ' ' ) {
+		memmove( name, name + 1, strlen( name ) );
+	}
+	len = strlen( name );
+	while ( len > 0 && name[len - 1] == ' ' ) {
+		name[--len] = 0;
+	}
+	if ( !len || len > maxLen || strstr( name, ".." ) ) {
+		return qfalse;
+	}
+	for ( p = name; *p; p++ ) {
+		if ( *p < ' ' || *p > '~' || *p == '"' || *p == ';' || *p == '\\' || *p == '/' || *p == ':' ||
+			*p == '*' || *p == '?' || *p == '<' || *p == '>' || *p == '|' || *p == '$' || *p == '`' ) {
+			return qfalse;
+		}
+	}
+	return qtrue;
+}
+
+// a relative path ending in .txt below the mod directory (the stats condump)
+static qboolean CG_OSPSafeTextPath( const char *path ) {
+	const char	*p;
+	int			len;
+
+	len = strlen( path );
+	if ( len < 5 || len >= MAX_QPATH || Q_stricmp( path + len - 4, ".txt" ) || *path == '/' || strstr( path, ".." ) ) {
+		return qfalse;
+	}
+	for ( p = path; *p; p++ ) {
+		if ( !( ( *p >= 'a' && *p <= 'z' ) || ( *p >= 'A' && *p <= 'Z' ) || ( *p >= '0' && *p <= '9' ) ||
+			*p == '_' || *p == '-' || *p == '.' || *p == '/' ) ) {
+			return qfalse;
+		}
+	}
+	return qtrue;
+}
+
+// copies the "stuff" text: '' becomes ', a single ' becomes "
+static void CG_OSPStuffUnquote( const char *in, int len, char *out ) {
+	int		i;
+
+	i = 0;
+	while ( *in && i < len ) {
+		if ( *in == '\'' ) {
+			in++;
+			if ( *in == '\'' ) {
+				*out++ = '\'';
+			} else {
+				*out++ = '"';
+			}
+			in++;
+			i++;
+		} else {
+			*out++ = *in++;
+			i++;
+		}
+	}
+	*out = 0;
+}
+
+// one ';'-separated piece of a stuff command: only the commands the OSP server actually sends
+// are accepted, every argument is validated and the console line is rebuilt from the tokens
+static void CG_OSPStuffOne( char *text ) {
+	char	tok[4][MAX_QPATH];
+	char	*p;
+	int		argc;
+
+	p = text;
+	for ( argc = 0; argc < 4; argc++ ) {
+		Q_strncpyz( tok[argc], COM_ParseExt( &p, qfalse ), sizeof( tok[argc] ) );
+		if ( !tok[argc][0] ) {
+			break;
+		}
+	}
+	if ( !argc ) {
+		return;
+	}
+
+	if ( argc == 1 && ( !Q_stricmp( tok[0], "stoprecord" ) || !Q_stricmp( tok[0], "clear" ) || !Q_stricmp( tok[0], "currenttime" ) ) ) {
+		trap_SendConsoleCommand( va( "%s\n", tok[0] ) );
+		return;
+	}
+	if ( argc <= 2 && ( !Q_stricmp( tok[0], "record" ) || !Q_stricmp( tok[0], "screenshot" ) || !Q_stricmp( tok[0], "screenshotJPEG" ) ) ) {
+		if ( argc == 1 ) {
+			trap_SendConsoleCommand( va( "%s\n", tok[0] ) );
+		} else if ( CG_OSPSafeFileName( tok[1], MAX_QPATH - 1 ) ) {
+			trap_SendConsoleCommand( va( "%s \"%s\"\n", tok[0], tok[1] ) );
+		}
+		return;
+	}
+	if ( argc == 2 && !Q_stricmp( tok[0], "condump" ) && CG_OSPSafeTextPath( tok[1] ) ) {
+		trap_SendConsoleCommand( va( "condump \"%s\"\n", tok[1] ) );
+		return;
+	}
+	if ( argc == 3 && ( !Q_stricmp( tok[0], "set" ) || !Q_stricmp( tok[0], "seta" ) ) ) {
+		if ( !Q_stricmp( tok[1], "g_synchronousclients" ) && ( !strcmp( tok[2], "0" ) || !strcmp( tok[2], "1" ) ) ) {
+			trap_Cvar_Set( "g_synchronousclients", tok[2] );
 			return;
-		} else if ( strstr( out, "set g_synchronous" ) == out ) {
-			return;
-		} else if ( strstr( out, "clear" ) == out ) {
-			return;
-		} else if ( strstr( out, "currenttime" ) == out ) {
-			return;
-		} else if ( strstr( out, "stoprecord" ) == out ) {
+		}
+		if ( !Q_stricmp( tok[1], "name" ) && CG_OSPSafeFileName( tok[2], 35 ) ) {	// MAX_NETNAME - 1
+			trap_Cvar_Set( "name", tok[2] );
 			return;
 		}
 	}
-	trap_SendConsoleCommand( va( "%s", out ) );
+	CG_Printf( "^3Ignored server stuff command: ^7%s\n", text );
+}
+
+// stuff <cmd> (server command). OSP used this to run arbitrary console text sent by the
+// server (autorecord, autoscreenshot, stats condump, name restore), which gave any server full
+// control of the client console. Now only those known commands are executed, see CG_OSPStuffOne.
+void CG_ServerCommandStuff( void ) {
+	char	cmd[MAX_STRING_CHARS];
+	char	out[MAX_STRING_CHARS];
+	char	*s;
+	char	*next;
+
+	if ( cg.demoPlayback ) {
+		return;
+	}
+	trap_Args( cmd, sizeof( cmd ) );
+	cmd[MAX_STRING_CHARS - 1] = 0;
+	CG_OSPStuffUnquote( cmd, strlen( cmd ), out );
+
+	for ( s = out; s && *s; s = next ) {
+		next = s;
+		while ( *next && *next != ';' && *next != '\n' && *next != '\r' ) {
+			next++;
+		}
+		if ( *next ) {
+			*next++ = 0;
+		} else {
+			next = NULL;
+		}
+		CG_OSPStuffOne( s );
+	}
 }
 
 // crecord <name> (server command): records a demo under the first free name
@@ -220,29 +337,6 @@ void CG_OSPClientScreenshot( void ) {
 // unreferenced
 int CG_OSPStub519( void ) {
 	return 0;
-}
-
-// copies the "stuff" text: '' becomes ', a single ' becomes "
-static void CG_OSPStuffUnquote( const char *in, int len, char *out ) {
-	int		i;
-
-	i = 0;
-	while ( *in && i < len ) {
-		if ( *in == '\'' ) {
-			in++;
-			if ( *in == '\'' ) {
-				*out++ = '\'';
-			} else {
-				*out++ = '"';
-			}
-			in++;
-			i++;
-		} else {
-			*out++ = *in++;
-			i++;
-		}
-	}
-	*out = 0;
 }
 
 // credits: the OSP credits in seven sliding windows
