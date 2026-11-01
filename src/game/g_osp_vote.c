@@ -429,7 +429,7 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 		if ( atoi( arg ) || !Q_stricmp( arg, "0" ) || !Q_stricmp( arg, "00" ) ) {
 			if ( OSP_ModeAvailable( atoi( arg ) ) ) {
 				osp_voteType = 27;
-				strcpy( osp_voteValue, arg );
+				Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", atoi( arg ) );
 				if ( *arg2 ) {
 					if ( !OSP_FindMapFile( arg2 ) ) {
 						trap_SendServerCommand( ent - g_entities, va( "print \"\nSorry, this server does not have map ^3%s^7.\n\n\"", arg2 ) );
@@ -481,7 +481,8 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 		osp_voteType = 42;
-		Com_sprintf( osp_voteValue, arg2Size, "%s", arg );
+		Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", atoi( arg ) );
+		Com_sprintf( arg, arg2Size, "%s", osp_voteValue );
 		Com_sprintf( cmd, arg2Size, "Respawn time:" );
 		return 1;
 	} else if ( !Q_stricmp( cmd, "weaponrespawn" ) || !Q_stricmp( cmd, "wr" ) ) {
@@ -503,7 +504,8 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 		osp_voteType = 50;
-		Com_sprintf( osp_voteValue, arg2Size, "%s", arg );
+		Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", atoi( arg ) );
+		Com_sprintf( arg, arg2Size, "%s", osp_voteValue );
 		Com_sprintf( cmd, arg2Size, "Weapon Respawn time:" );
 		return 1;
 	} else if ( !Q_stricmp( cmd, "pmove" ) || !Q_stricmp( cmd, "125hz" ) ) {
@@ -531,7 +533,8 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 		osp_voteType = 47;
-		Com_sprintf( osp_voteValue, arg2Size, "%s", arg );
+		Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", atoi( arg ) );
+		Com_sprintf( arg, arg2Size, "%s", osp_voteValue );
 		Com_sprintf( cmd, arg2Size, "timelimit" );
 		return 1;
 	} else if ( !Q_stricmp( cmd, "fl" ) || !Q_stricmp( cmd, "fraglimit" ) ) {
@@ -557,7 +560,8 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 		osp_voteType = 18;
-		Com_sprintf( osp_voteValue, arg2Size, "%s", arg );
+		Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", atoi( arg ) );
+		Com_sprintf( arg, arg2Size, "%s", osp_voteValue );
 		Com_sprintf( cmd, arg2Size, "fraglimit" );
 		return 1;
 	} else if ( !Q_stricmp( cmd, "cl" ) || !Q_stricmp( cmd, "capturelimit" ) ) {
@@ -583,7 +587,8 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 		osp_voteType = 13;
-		Com_sprintf( osp_voteValue, arg2Size, "%s", arg );
+		Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", atoi( arg ) );
+		Com_sprintf( arg, arg2Size, "%s", osp_voteValue );
 		Com_sprintf( cmd, arg2Size, "capturelimit" );
 		return 1;
 	} else if ( !Q_stricmp( cmd, "rl" ) || !Q_stricmp( cmd, "roundlimit" ) ) {
@@ -605,7 +610,8 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 		osp_voteType = 43;
-		Com_sprintf( osp_voteValue, arg2Size, "%s", arg );
+		Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", atoi( arg ) );
+		Com_sprintf( arg, arg2Size, "%s", osp_voteValue );
 		Com_sprintf( cmd, arg2Size, "roundlimit" );
 		return 1;
 	} else if ( !Q_stricmp( cmd, "poweruprespawn" ) ) {
@@ -628,7 +634,8 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 		osp_voteType = 38;
-		Com_sprintf( osp_voteValue, arg2Size, "%s", arg );
+		Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", atoi( arg ) );
+		Com_sprintf( arg, arg2Size, "%s", osp_voteValue );
 		Com_sprintf( cmd, arg2Size, name );
 		return 1;
 	} else if ( !Q_stricmp( cmd, "fastrail" ) ) {
@@ -659,7 +666,8 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 		osp_voteType = 41;
-		Com_sprintf( osp_voteValue, arg2Size, "%s", arg );
+		Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", atoi( arg ) );
+		Com_sprintf( arg, arg2Size, "%s", osp_voteValue );
 		Com_sprintf( cmd, arg2Size, name );
 		return 1;
 	} else if ( !Q_stricmp( cmd, "lgcooldown" ) ) {
@@ -691,7 +699,7 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 		osp_voteType = 36;
-		Com_sprintf( osp_voteValue, arg2Size, "%s", arg );
+		Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", atoi( arg ) );
 		Com_sprintf( cmd, arg2Size, "%s", OSP_OvertimeModeName( qfalse, atoi( arg ) ) );
 		Com_sprintf( arg, arg2Size, name );
 		return 1;
@@ -724,7 +732,8 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 		osp_voteType = 25;
-		Com_sprintf( osp_voteValue, arg2Size, "%s", arg );
+		Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", atoi( arg ) );
+		Com_sprintf( arg, arg2Size, "%s", osp_voteValue );
 		Com_sprintf( cmd, arg2Size, va( "Set %s to", name ) );
 		return 1;
 	} else if ( !Q_stricmp( cmd, "mg_damage" ) ) {
@@ -748,7 +757,8 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 		osp_voteType = 26;
-		Com_sprintf( osp_voteValue, arg2Size, "%s", arg );
+		Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", atoi( arg ) );
+		Com_sprintf( arg, arg2Size, "%s", osp_voteValue );
 		Com_sprintf( cmd, arg2Size, va( "Set %s to", name ) );
 		return 1;
 	} else if ( !Q_stricmp( cmd, "maxpackets_min" ) ) {
@@ -772,7 +782,7 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 		osp_voteType = 29;
-		Com_sprintf( osp_voteValue, arg2Size, "%s", arg );
+		Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", atoi( arg ) );
 		Com_sprintf( cmd, arg2Size, va( "Clamp %s to", name ) );
 		Com_sprintf( arg, arg2Size, "%s", ( atoi( osp_voteValue ) ) ? osp_voteValue : DISABLED );
 		return 1;
@@ -797,7 +807,7 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 		osp_voteType = 30;
-		Com_sprintf( osp_voteValue, arg2Size, "%s", arg );
+		Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", atoi( arg ) );
 		Com_sprintf( cmd, arg2Size, va( "Clamp %s to", name ) );
 		Com_sprintf( arg, arg2Size, "%s", ( atoi( osp_voteValue ) ) ? osp_voteValue : DISABLED );
 		return 1;
@@ -822,7 +832,7 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 		osp_voteType = 33;
-		Com_sprintf( osp_voteValue, arg2Size, "%s", arg );
+		Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", atoi( arg ) );
 		Com_sprintf( cmd, arg2Size, va( "Clamp %s to", name ) );
 		Com_sprintf( arg, arg2Size, "%s", ( atoi( osp_voteValue ) ) ? osp_voteValue : DISABLED );
 		return 1;
@@ -848,7 +858,7 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 		osp_voteType = 34;
-		Com_sprintf( osp_voteValue, arg2Size, "%s", arg );
+		Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", atoi( arg ) );
 		Com_sprintf( cmd, arg2Size, va( "Clamp %s to", name ) );
 		Com_sprintf( arg, arg2Size, "%s", ( atoi( osp_voteValue ) ) ? osp_voteValue : DISABLED );
 		return 1;
@@ -936,7 +946,7 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 		osp_voteType = 40;
-		Com_sprintf( osp_voteValue, arg2Size, "%d", pid );
+		Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", pid );
 		Com_sprintf( cmd, arg2Size, "referee" );
 		Com_sprintf( arg, arg2Size, "%s", level.clients[pid].pers.netname );
 		return 1;
@@ -976,7 +986,7 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 		osp_voteType = 48;
-		Com_sprintf( osp_voteValue, arg2Size, "%d", pid );
+		Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", pid );
 		Com_sprintf( cmd, arg2Size, "UN-referee" );
 		Com_sprintf( arg, arg2Size, "%s", level.clients[pid].pers.netname );
 		return 1;
@@ -1010,7 +1020,7 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 		osp_voteType = 21;
-		Com_sprintf( osp_voteValue, arg2Size, "%d", pid );
+		Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", pid );
 		Com_sprintf( cmd, arg2Size, "KICK" );
 		Com_sprintf( arg, arg2Size, "%s", level.clients[pid].pers.netname );
 		return 1;
@@ -1087,7 +1097,7 @@ int OSP_Vote_ItemToggle( gentity_t *ent, char *arg, char *arg2, int arg2Size, qb
 			}
 
 			osp_voteType = types[i];
-			strcpy( osp_voteValue, arg2 );
+			Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", atoi( arg2 ) ? 1 : 0 );
 			Com_sprintf( arg, arg2Size, atoi( arg2 ) ? ENABLE : DISABLE );
 			Com_sprintf( arg2, arg2Size, longNames[i] );
 			return 1;
@@ -1626,7 +1636,7 @@ int OSP_Vote_Toggle( gentity_t *ent, char *arg, char *arg2, int arg2Size, char *
 	}
 
 	osp_voteType = voteType;
-	Com_sprintf( osp_voteValue, arg2Size, "%s", arg2 );
+	Com_sprintf( osp_voteValue, sizeof( osp_voteValue ), "%d", atoi( arg2 ) ? 1 : 0 );
 	Com_sprintf( arg, arg2Size, "%s", atoi( arg2 ) ? ALLOW : DISABLE );
 	Com_sprintf( arg2, arg2Size, name );
 	return 1;
