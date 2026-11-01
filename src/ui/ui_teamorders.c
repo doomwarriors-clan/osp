@@ -310,6 +310,9 @@ static void UI_TeamOrdersMenu_BuildBotList( void ) {
 
 	trap_GetConfigString( CS_SERVERINFO, info, sizeof(info) );
 	numPlayers = atoi( Info_ValueForKey( info, "sv_maxclients" ) );
+	if ( numPlayers < 0 || numPlayers > MAX_CLIENTS ) {	// server-supplied; bounds the loop below
+		numPlayers = MAX_CLIENTS;
+	}
 	teamOrdersMenuInfo.gametype = atoi( Info_ValueForKey( info, "g_gametype" ) );
 
 	for( n = 0; n < numPlayers && teamOrdersMenuInfo.numBots < 9; n++ ) {
@@ -334,6 +337,17 @@ static void UI_TeamOrdersMenu_BuildBotList( void ) {
 
 		Q_strncpyz( teamOrdersMenuInfo.botNames[teamOrdersMenuInfo.numBots], Info_ValueForKey( info, "n" ), 16 );
 		Q_CleanStr( teamOrdersMenuInfo.botNames[teamOrdersMenuInfo.numBots] );
+		// the name is spliced into a quoted console command (say_team "..."): a quote or a
+		// separator in a server-supplied name would run further commands
+		{
+			char	*p;
+
+			for ( p = teamOrdersMenuInfo.botNames[teamOrdersMenuInfo.numBots]; *p; p++ ) {
+				if ( *p == '"' || *p == ';' || *p == '$' || *p == '\\' || *p < ' ' ) {
+					*p = '_';
+				}
+			}
+		}
 		teamOrdersMenuInfo.numBots++;
 	}
 }
