@@ -907,7 +907,7 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 		}
 		return OSP_Vote_Toggle( ent, cmd, arg, arg2Size, s, name, ( g_friendlyFire.integer ) ? 1 : 0, vote_allow_teamdamage.integer, 48, 45 );
 	} else if ( !Q_stricmp( cmd, "referee" ) || !Q_stricmp( cmd, "ref" ) ) {
-		char	buf[128];
+		char	buf[MAX_STRING_CHARS];
 		int		pid;
 
 		if ( !vote_allow_referee.integer && !ent->client->sess.referee ) {
@@ -919,12 +919,12 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 
-		strcpy( buf, arg );
+		Q_strncpyz( buf, arg, sizeof( buf ) );
 		if ( trap_Argc() > 3 ) {
 			for ( i = 3; i < trap_Argc(); i++ ) {
-				strcat( buf, " " );
+				Q_strcat( buf, sizeof( buf ), " " );
 				trap_Argv( i, arg, MAX_STRING_TOKENS );
-				strcat( buf, arg );
+				Q_strcat( buf, sizeof( buf ), arg );
 			}
 		}
 
@@ -951,7 +951,7 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 		Com_sprintf( arg, arg2Size, "%s", level.clients[pid].pers.netname );
 		return 1;
 	} else if ( !Q_stricmp( cmd, "unreferee" ) || !Q_stricmp( cmd, "unref" ) ) {
-		char	buf[128];
+		char	buf[MAX_STRING_CHARS];
 		int		pid;
 
 		if ( !vote_allow_referee.integer && !ent->client->sess.referee ) {
@@ -959,12 +959,12 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 
-		strcpy( buf, arg );
+		Q_strncpyz( buf, arg, sizeof( buf ) );
 		if ( trap_Argc() > 3 ) {
 			for ( i = 3; i < trap_Argc(); i++ ) {
-				strcat( buf, " " );
+				Q_strcat( buf, sizeof( buf ), " " );
 				trap_Argv( i, arg, MAX_STRING_TOKENS );
-				strcat( buf, arg );
+				Q_strcat( buf, sizeof( buf ), arg );
 			}
 		}
 
@@ -991,7 +991,7 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 		Com_sprintf( arg, arg2Size, "%s", level.clients[pid].pers.netname );
 		return 1;
 	} else if ( !Q_stricmp( cmd, "kick" ) ) {
-		char	buf[128];
+		char	buf[MAX_STRING_CHARS];
 		int		pid;
 
 		if ( !vote_allow_kick.integer && !ent->client->sess.referee ) {
@@ -1002,12 +1002,12 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 			return -1;
 		}
 
-		strcpy( buf, arg );
+		Q_strncpyz( buf, arg, sizeof( buf ) );
 		if ( trap_Argc() > 3 ) {
 			for ( i = 3; i < trap_Argc(); i++ ) {
-				strcat( buf, " " );
+				Q_strcat( buf, sizeof( buf ), " " );
 				trap_Argv( i, arg, MAX_STRING_TOKENS );
-				strcat( buf, arg );
+				Q_strcat( buf, sizeof( buf ), arg );
 			}
 		}
 
