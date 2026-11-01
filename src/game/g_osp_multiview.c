@@ -8,6 +8,7 @@
 #include "g_local.h"
 
 #define	OSP_MV_MAXVIEWS		12
+#define	OSP_MV_MAXPORTALS	64	// server-wide cap on multiview portal entities (one per view)
 
 // "viewadd <player>"
 void OSP_Cmd_ViewAdd_f( gentity_t *ent ) {
@@ -397,6 +398,19 @@ void OSP_Cmd_ViewTeam_f( gentity_t *ent, int team, qboolean fValidate ) {
 	ClientUserinfoChanged( ent - g_entities );
 }
 
+// live multiview views (= portal entities) of all connected clients
+static int OSP_MV_TotalViews( void ) {
+	int		i;
+	int		total = 0;
+
+	for ( i = 0; i < level.maxclients; i++ ) {
+		if ( level.clients[i].pers.connected != CON_DISCONNECTED ) {
+			total += level.clients[i].pers.mvCount;
+		}
+	}
+	return total;
+}
+
 // new window showing pid; the first one starts the multiview spectator mode
 void OSP_MV_AddView( gentity_t *ent, int pid, qboolean fVerbose ) {
 	int			i;
@@ -409,7 +423,16 @@ void OSP_MV_AddView( gentity_t *ent, int pid, qboolean fVerbose ) {
 		return;
 	}
 
-	if ( pid > level.maxclients || pid < 0 ) {
+	// every view costs one entity; with many spectators that exhausted g_entities and
+	// G_Spawn() ended the map, so cap the total server-wide
+	if ( OSP_MV_TotalViews() >= OSP_MV_MAXPORTALS ) {
+		if ( fVerbose ) {
+			trap_SendServerCommand( ent - g_entities, "print \"^3The server has no room for more multiview windows.\n\"" );
+		}
+		return;
+	}
+
+	if ( pid >= level.maxclients || pid < 0 ) {
 		if ( fVerbose ) {
 			trap_SendServerCommand( ent - g_entities, va( "print \"^3Illegal player ID: %d\n\"", pid ) );
 		}
