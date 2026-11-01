@@ -668,6 +668,10 @@ static void ArenaServers_Insert( char* adrstr, char* info, int pingtime )
 	}
 	*/
 	servernodeptr->nettype = atoi(Info_ValueForKey(info, "nettype"));
+	// indexes netnames[] (3 entries); the value can come from the queried server's info string
+	if ( servernodeptr->nettype < 0 || servernodeptr->nettype >= 3 ) {
+		servernodeptr->nettype = 0;
+	}
 
 	s = Info_ValueForKey( info, "game");
 	i = atoi( Info_ValueForKey( info, "gametype") );
