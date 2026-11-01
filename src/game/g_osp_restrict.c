@@ -190,7 +190,8 @@ int OSP_CheckClientFilters( char *name, int clientNum, qboolean nameOnly ) {
 	int		i;
 	char	buf[256];
 
-	OSP_NormalizeName( name, strlen( name ), buf, qfalse );
+	// SRV-01: bound the copy by the output buffer, not by the (client-controlled) input length
+	OSP_NormalizeName( name, sizeof( buf ), buf, qfalse );
 	if ( strstr( buf, "QTV-" ) == buf || strstr( buf, "GTV-" ) == buf ||
 		( player_always.string[0] && strstr( buf, player_always.string ) == buf ) ) {
 		return 2;
@@ -229,9 +230,14 @@ int OSP_NormalizeName( char *in, int len, char *out, qboolean toLower ) {
 	int		i;
 	char	*start;
 
+	// SRV-01: len is the capacity of out (including the terminating NUL); never write past it.
+	// The input bound (i < len) is kept so existing callers behave as before.
+	if ( len <= 0 ) {
+		return 0;
+	}
 	i = 0;
 	start = out;
-	while ( *in && i < len ) {
+	while ( *in && i < len && ( out - start ) < len - 1 ) {
 		if ( *in == 27 || *in == Q_COLOR_ESCAPE ) {
 			in++;
 			i++;
@@ -750,7 +756,8 @@ int OSP_PlayerNameTeam( gclient_t *client, char *userinfo ) {
 	}
 
 	s = Info_ValueForKey( userinfo, "name" );
-	OSP_NormalizeName( s, strlen( s ), buf, qfalse );
+	// SRV-01: same overflow as OSP_CheckClientFilters
+	OSP_NormalizeName( s, sizeof( buf ), buf, qfalse );
 	for ( i = 0; i < osp_numPlayerNames; i++ ) {
 		if ( !Q_stricmp( buf, osp_playerNames[i].name ) ) {
 			if ( client ) {
