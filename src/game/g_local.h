@@ -1478,7 +1478,8 @@ extern	int			osp_numModes;	// 8
 char	*OSP_ModeName( int mode );
 void	OSP_SetGametype( int mode );
 void	OSP_LoadModeMaplist( int mode, char *map );	// OSP: mode's map settings and map list; nextmap = map (NULL: the current map) when it is in the list
-int		OSP_ModeAvailable( int mode );	// nonzero when mode is enabled in server_availmodes or is a custom mode
+int		OSP_ModeAvailable( int mode );
+char	*OSP_CustomModeConfig( int mode );	// config of a loaded custom mode, "" otherwise	// nonzero when mode is enabled in server_availmodes or is a custom mode
 char	*OSP_ReadConfigLine( char *buf, int size, char *line, int lineSize );	// OSP: copies the next non-comment line of buf (size bytes left) to line; returns the position after it, NULL at the end
 
 // g_osp_freeze.c

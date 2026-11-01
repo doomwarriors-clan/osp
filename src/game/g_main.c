@@ -1369,10 +1369,15 @@ void ExitLevel (void) {
 	// OSP: a mode vote decides what comes next (custom modes exec their config)
 	mode = level.nextMode - 1;
 	if ( mode >= osp_numModes && !level.voteTime ) {
-		OSP_ResetCvarDefaults();
-		OSP_SetMapSessionCount( 0 );
-		trap_SendConsoleCommand( EXEC_APPEND, va( "exec %s\n", level.customModeConfig[mode - osp_numModes] ) );
-		return;
+		if ( OSP_CustomModeConfig( mode )[0] ) {
+			OSP_ResetCvarDefaults();
+			OSP_SetMapSessionCount( 0 );
+			trap_SendConsoleCommand( EXEC_APPEND, va( "exec %s\n", OSP_CustomModeConfig( mode ) ) );
+			return;
+		}
+		// not a loaded custom mode: forget it and change map normally instead of waiting forever
+		G_Printf( "ExitLevel: mode %d is not a loaded custom mode, ignored.\n", mode );
+		level.nextMode = 0;
 	}
 
 	if ( level.nextMode > 0 && mode < osp_numModes ) {
@@ -1800,8 +1805,12 @@ void CheckExitRules( void ) {
 				trap_Cvar_Update( &z_m_current );
 				OSP_HidePlayersInServerinfo( 0 );
 				OSP_SetMapSessionCount( 0 );
-				G_Printf( ">> Execing default mode config: '%s'\n", level.customModeConfig[level.nextMode - osp_numModes] );
-				trap_SendConsoleCommand( EXEC_APPEND, va( "exec %s\n", level.customModeConfig[level.nextMode - osp_numModes] ) );
+				if ( OSP_CustomModeConfig( level.nextMode )[0] ) {
+					G_Printf( ">> Execing default mode config: '%s'\n", OSP_CustomModeConfig( level.nextMode ) );
+					trap_SendConsoleCommand( EXEC_APPEND, va( "exec %s\n", OSP_CustomModeConfig( level.nextMode ) ) );
+				} else {
+					G_Printf( ">> Default mode %d is not a loaded custom mode, ignored.\n", level.nextMode );
+				}
 				return;
 			} else {
 				level.nextMode++;

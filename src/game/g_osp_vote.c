@@ -442,7 +442,7 @@ int OSP_Vote_Parse( gentity_t *ent, char *cmd, char *arg, char *arg2, int arg2Si
 					Com_sprintf( cmd, arg2Size, "Reset settings for:" );
 					Com_sprintf( arg, arg2Size, "%s", OSP_ModeName( atoi( arg ) ) );
 					return 1;
-				} else if ( g_gametype.integer == osp_modes[atoi( arg )].gametype ) {
+				} else if ( atoi( arg ) < osp_numModes && g_gametype.integer == osp_modes[atoi( arg )].gametype ) {
 					Com_sprintf( cmd, arg2Size, "Change settings to:" );
 					Com_sprintf( arg, arg2Size, "%s", OSP_ModeName( atoi( arg ) ) );
 					return 1;

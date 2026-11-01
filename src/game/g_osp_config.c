@@ -564,9 +564,13 @@ void OSP_DefaultModeLoad( gentity_t *ent ) {
 		OSP_LoadModeMaplist( mode, NULL );
 
 		if ( mode >= osp_numModes ) {
-			OSP_HidePlayersInServerinfo( 0 );
-			OSP_SetMapSessionCount( 0 );
-			trap_SendConsoleCommand( EXEC_NOW, va( "exec %s\n", level.customModeConfig[mode - osp_numModes] ) );
+			if ( OSP_CustomModeConfig( mode )[0] ) {
+				OSP_HidePlayersInServerinfo( 0 );
+				OSP_SetMapSessionCount( 0 );
+				trap_SendConsoleCommand( EXEC_NOW, va( "exec %s\n", OSP_CustomModeConfig( mode ) ) );
+			} else {
+				G_Printf( ">> Default mode %d is not a loaded custom mode, ignored.\n", mode );
+			}
 		} else {
 			trap_Cvar_Set( "g_gametype", va( "%d", osp_modes[mode].gametype ) );
 			trap_Cvar_Update( &g_gametype );
@@ -669,23 +673,46 @@ char *OSP_ModeName( int mode ) {
 	if ( mode < osp_numModes ) {
 		return va( "%s", osp_modes[mode].name );
 	}
+	if ( mode - osp_numModes >= MAX_OSP_CUSTOMMODES ) {
+		return va( "%s", "UNKNOWN" );
+	}
 	return va( "%s", level.customModeName[mode - osp_numModes] );
+}
+
+/*
+==================
+OSP_CustomModeConfig
+
+Config file of custom mode (osp_numModes + i); "" when mode is not a loaded custom mode.
+==================
+*/
+char *OSP_CustomModeConfig( int mode ) {
+	int		i;
+
+	i = mode - osp_numModes;
+	if ( i < 0 || i >= MAX_OSP_CUSTOMMODES || i >= level.numVoteModes - level.numStdModes ) {
+		return "";
+	}
+	return level.customModeConfig[i];
 }
 
 /*
 ==================
 OSP_ModeAvailable
 
-Nonzero when mode is a standard mode enabled in server_availmodes or a custom mode
-(OSP bug, kept for compatibility: the upper bound accepts one mode too many)
+Nonzero when mode is a standard mode enabled in server_availmodes or a loaded custom mode.
+The mode number comes from a vote argument: no shift by an out-of-range count, and custom
+modes are bounded by the loaded count and the table size (the original accepted one too many).
 ==================
 */
 int OSP_ModeAvailable( int mode ) {
-	if ( ( server_availmodes.integer & ( 1 << mode ) ) ||
-		( mode >= osp_numModes && mode <= osp_numModes + level.numVoteModes - level.numStdModes ) ) {
-		return 1;
+	if ( mode < 0 ) {
+		return 0;
 	}
-	return 0;
+	if ( mode < osp_numModes ) {
+		return ( server_availmodes.integer & ( 1 << mode ) ) ? 1 : 0;
+	}
+	return OSP_CustomModeConfig( mode )[0] ? 1 : 0;
 }
 
 /*
