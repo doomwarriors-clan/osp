@@ -125,9 +125,20 @@ static void CG_ParseTeamInfo( void ) {
 	if ( cg.mvActive ) {
 		mv = 1;
 	}
+	// the count and every client number come from the server: clamp the count to the
+	// overlay table and to what the command actually carries, reject bad client numbers
+	if ( numSortedTeamPlayers < 0 || numSortedTeamPlayers > TEAM_MAXOVERLAY ||
+		numSortedTeamPlayers * 6 + 2 > trap_Argc() ) {
+		numSortedTeamPlayers = 0;
+		return;
+	}
 
 	for ( i = 0 ; i < numSortedTeamPlayers ; i++ ) {
 		client = atoi( CG_Argv( i * 6 + 2 ) );
+		if ( client < 0 || client >= MAX_CLIENTS ) {
+			numSortedTeamPlayers = 0;
+			return;
+		}
 
 		sortedTeamPlayers[i] = client;
 
@@ -135,17 +146,23 @@ static void CG_ParseTeamInfo( void ) {
 			CG_CustomLocationsSetLocation( CG_Argv( i * 6 + 3 ), cgs.clientinfo[ client ].customLocation );
 		} else if ( !cg.mvActive ) {
 			cgs.clientinfo[ client ].location = atoi( CG_Argv( i * 6 + 3 ) );
+			if ( cgs.clientinfo[ client ].location < 0 || cgs.clientinfo[ client ].location >= MAX_LOCATIONS ) {
+				cgs.clientinfo[ client ].location = 0;
+			}
 		}
 		cgs.clientinfo[ client ].health = atoi( CG_Argv( i * 6 + 4 - mv ) );
 		cgs.clientinfo[ client ].armor = atoi( CG_Argv( i * 6 + 5 - mv ) );
 		cgs.clientinfo[ client ].curWeapon = atoi( CG_Argv( i * 6 + 6 - mv ) );
+		if ( cgs.clientinfo[ client ].curWeapon < 0 || cgs.clientinfo[ client ].curWeapon >= WP_NUM_WEAPONS ) {
+			cgs.clientinfo[ client ].curWeapon = WP_NONE;
+		}
 		cgs.clientinfo[ client ].powerups = atoi( CG_Argv( i * 6 + 7 - mv ) );
 		if ( mv ) {
 			char	*p;
 			char	buf[32];
 			char	*q;
 
-			strcpy( buf, CG_Argv( i * 6 + 7 ) );
+			Q_strncpyz( buf, CG_Argv( i * 6 + 7 ), sizeof( buf ) );
 			p = strchr( buf, '_' );
 			if ( p ) {
 				*p = 0;
