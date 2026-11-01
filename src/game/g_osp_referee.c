@@ -428,6 +428,18 @@ void OSP_Ref_Map( gentity_t *ent, int argOffset ) {
 		return;
 	}
 
+	// the name goes to the server console: accept only a map that exists on this server
+	// (as the vote path does), which also keeps ';', quotes and control characters out
+	if ( !map[0] || !OSP_FindMapFile( map ) ) {
+		trap_SendServerCommand( ent - g_entities, va( "print \"Map ^3%s^7 not found.\n\"", map ) );
+		if ( !argOffset ) {
+			trap_SendServerCommand( ent - g_entities, "print \"Usage: ^3\\r_map <mapname>^7\n\"" );
+		} else {
+			trap_SendServerCommand( ent - g_entities, "print \"Usage: ^3\\ref map <mapname>^7\n\"" );
+		}
+		return;
+	}
+
 	trap_SendServerCommand( -1, va( "print \"Referee changes map to: %s\n", map ) );
 	trap_Cvar_VariableStringBuffer( "nextmap", nextmap, sizeof( nextmap ) );
 	if ( *nextmap ) {
