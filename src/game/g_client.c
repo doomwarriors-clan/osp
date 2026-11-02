@@ -741,9 +741,10 @@ void ClientUserinfoChanged( int clientNum ) {
 		strcpy (userinfo, "\\name\\badinfo");
 	}
 
-	// check for local client
+	// check for local client: only from the connect-time userinfo, where the engine itself
+	// wrote the "ip" key; some engines keep a client-supplied "ip" on later updates
 	s = Info_ValueForKey( userinfo, "ip" );
-	if ( !strcmp( s, "localhost" ) ) {
+	if ( client->pers.connected == CON_CONNECTING && !strcmp( s, "localhost" ) ) {
 		client->pers.localClient = qtrue;
 		// OSP: a listen server can't do OSP authentication
 		if ( server_ospauth.integer ) {
@@ -953,6 +954,11 @@ char *ClientConnect( int clientNum, qboolean firstTime, qboolean isBot ) {
 	trap_GetUserinfo( clientNum, userinfo, sizeof( userinfo ) );
 
 	if ( !isBot ) {
+		// the engine inserts the real address as "ip" on every connect; a userinfo without it
+		// (an over-long one on 1.32b engines) would otherwise pass every address filter
+		if ( firstTime && !*Info_ValueForKey( userinfo, "ip" ) ) {
+			return "Bad userinfo";
+		}
 		// check to see if they are on the banned IP list
 		value = Info_ValueForKey (userinfo, "ip");
 		if ( G_FilterPacket( value ) ) {

@@ -565,7 +565,7 @@ int OSP_CheckFilters( char *name, int clientNum, qboolean nameOnly ) {
 	if ( !ip[0] ) {
 		Q_strncpyz( ip, Info_ValueForKey( userinfo, "ip" ), sizeof( ip ) );
 		if ( !ip[0] ) {
-			return 1;
+			return 0;	// no address to check against the filters: refuse, do not skip them
 		}
 	}
 	Q_strncpyz( password, Info_ValueForKey( userinfo, "password" ), 64 );
