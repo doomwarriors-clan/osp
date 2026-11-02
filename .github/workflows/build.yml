@@ -1,7 +1,9 @@
-# Builds qagame, cgame and ui with the xq3osp-build Docker image, checks every QVM
-# against the OSP 1.03a release hash (make verify), and uploads the QVMs as a workflow
-# artifact. On a tag push the same files are attached to a GitHub release named after
-# the tag, e.g.  git tag 1.03a && git push origin 1.03a
+# Builds qagame, cgame and ui with the xq3osp-build Docker image, prints the size and
+# SHA-256 of every QVM (make info), and uploads the QVMs as a workflow artifact. On a tag
+# push the same files are attached to a GitHub release named after the tag.
+# The sources carry changes on top of OSP 1.03a (security fixes), so the QVMs no longer
+# match the release hashes. The byte-identical check (make verify) only runs when the
+# workflow is started by hand with "verify" set, e.g. on the original 1.03a sources.
 name: build
 
 on:
@@ -10,13 +12,18 @@ on:
     tags: ['*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      verify:
+        description: Compare every QVM with the OSP 1.03a release hash (make verify)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   qvm:
-    name: build and verify QVMs
+    name: build QVMs
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,7 +31,15 @@ jobs:
       - name: Build toolchain image
         run: docker build -f docker/Dockerfile -t xq3osp-build .
 
-      - name: Build and verify modules
+      - name: Build modules
+        run: |
+          for m in qagame cgame ui; do
+            docker run --rm -v "$PWD:/work" -w /work xq3osp-build \
+              make -C build MODULE="$m" info
+          done
+
+      - name: Verify against the OSP 1.03a release
+        if: inputs.verify
         run: |
           for m in qagame cgame ui; do
             docker run --rm -v "$PWD:/work" -w /work xq3osp-build \
@@ -65,9 +80,10 @@ jobs:
         with:
           name: OSP Tourney ${{ github.ref_name }}
           body: |
-            Byte-identical rebuild of the OSP Tourney ${{ github.ref_name }} QVMs
-            (`qagame`, `cgame`, `ui`) from the recovered sources. Every file was
-            verified against the SHA-256 of the originally shipped QVM.
+            OSP Tourney QVMs (`qagame`, `cgame`, `ui`) built from the recovered
+            sources at ${{ github.ref_name }}, with changes on top of OSP 1.03a
+            (security fixes). The files are not byte-identical to the original
+            release; `SHA256SUMS.txt` lists the hashes of this build.
 
             Drop the `vm/` folder into a pk3 (a zip renamed to `.pk3`) in your `osp`
             mod directory, or use the attached zip as is.

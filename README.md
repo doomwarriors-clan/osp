@@ -18,6 +18,12 @@ id Software's original 1.32b `q3lcc` and `q3asm`, the sources produce files that
 
 TODO: you need a tool chain (lcc, etc.). Currently, it's build locally with a local 32-bit lcc (since id software used 32-bit lcc). We need to check if 64-bit lcc is a better choice.
 
+## Security fixes
+
+The `security-patches` branch fixes security issues found in OSP 1.03a. Because of these
+fixes, the QVMs built from this branch are no longer identical to the original 1.03a
+files, and their checksums differ from the ones listed above.
+
 ## Credits
 
 The restoration would not have been possible without these projects:
