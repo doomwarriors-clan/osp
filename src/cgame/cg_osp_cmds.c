@@ -152,6 +152,28 @@ static qboolean CG_OSPSafeFileName( char *name, int maxLen ) {
 	return qtrue;
 }
 
+// the old name the server restores after a refused name change ("stuff seta name ' <name>'"):
+// it is set as a cvar, never run through the console, so any byte 0x01-0xff passes (clan tags)
+// except those a userinfo value cannot hold
+static qboolean CG_OSPSafePlayerName( char *name ) {
+	char	*p;
+	int		len;
+
+	while ( *name == ' ' ) {
+		memmove( name, name + 1, strlen( name ) );
+	}
+	len = strlen( name );
+	if ( !len || len > 35 ) {	// MAX_NETNAME - 1
+		return qfalse;
+	}
+	for ( p = name; *p; p++ ) {
+		if ( *p == '"' || *p == ';' || *p == '\\' ) {
+			return qfalse;
+		}
+	}
+	return qtrue;
+}
+
 // a relative path ending in .txt below the mod directory (the stats condump)
 static qboolean CG_OSPSafeTextPath( const char *path ) {
 	const char	*p;
@@ -233,7 +255,7 @@ static void CG_OSPStuffOne( char *text ) {
 			trap_SendConsoleCommand( va( "set g_synchronousclients %s\n", tok[2] ) );
 			return;
 		}
-		if ( !Q_stricmp( tok[1], "name" ) && CG_OSPSafeFileName( tok[2], 35 ) ) {	// MAX_NETNAME - 1
+		if ( !Q_stricmp( tok[1], "name" ) && CG_OSPSafePlayerName( tok[2] ) ) {
 			trap_Cvar_Set( "name", tok[2] );
 			return;
 		}
