@@ -196,7 +196,7 @@ static void CG_OSPStuffUnquote( const char *in, int len, char *out ) {
 // one ';'-separated piece of a stuff command: only the commands the OSP server actually sends
 // are accepted, every argument is validated and the console line is rebuilt from the tokens
 static void CG_OSPStuffOne( char *text ) {
-	char	tok[4][MAX_QPATH];
+	char	tok[4][MAX_OSPATH];	// demo names (players, map, host, date) are often longer than MAX_QPATH
 	char	*p;
 	int		argc;
 
@@ -218,7 +218,7 @@ static void CG_OSPStuffOne( char *text ) {
 	if ( argc <= 2 && ( !Q_stricmp( tok[0], "record" ) || !Q_stricmp( tok[0], "screenshot" ) || !Q_stricmp( tok[0], "screenshotJPEG" ) ) ) {
 		if ( argc == 1 ) {
 			trap_SendConsoleCommand( va( "%s\n", tok[0] ) );
-		} else if ( CG_OSPSafeFileName( tok[1], MAX_QPATH - 1 ) ) {
+		} else if ( CG_OSPSafeFileName( tok[1], sizeof( tok[1] ) - 1 ) ) {
 			trap_SendConsoleCommand( va( "%s \"%s\"\n", tok[0], tok[1] ) );
 		}
 		return;
