@@ -306,6 +306,25 @@ static sfxHandle_t PlayerModel_MenuKey( int key )
 PlayerModel_PicEvent
 =================
 */
+/*
+=================
+PlayerModel_ModelSkin
+
+"<model>/icon_<skin>" -> "<model>/<skin>", bounded: the names come from pk3 file lists and
+can be longer than the 64-byte buffers
+=================
+*/
+static void PlayerModel_ModelSkin( char *dst, int dstSize, const char *buffptr, const char *pdest ) {
+	int		len;
+
+	len = pdest - buffptr + 1;
+	if ( len > dstSize ) {
+		len = dstSize;
+	}
+	Q_strncpyz( dst, buffptr, len );
+	Q_strcat( dst, dstSize, pdest + 5 );
+}
+
 static void PlayerModel_PicEvent( void* ptr, int event )
 {
 	int				modelnum;
@@ -336,8 +355,7 @@ static void PlayerModel_PicEvent( void* ptr, int event )
 	if (pdest)
 	{
 		// track the whole model/skin name
-		Q_strncpyz(s_playermodel.modelskin,buffptr,pdest-buffptr+1);
-		strcat(s_playermodel.modelskin,pdest + 5);
+		PlayerModel_ModelSkin( s_playermodel.modelskin, sizeof( s_playermodel.modelskin ), buffptr, pdest );
 
 		// seperate the model name
 		maxlen = pdest-buffptr;
@@ -424,7 +442,11 @@ static void PlayerModel_BuildList( void )
 		{
 			filelen = strlen(fileptr);
 
-			COM_StripExtension(fileptr,skinname);
+			// bounded strip-extension: COM_StripExtension copies without a size
+			Q_strncpyz( skinname, fileptr, sizeof( skinname ) );
+			if ( strchr( skinname, '.' ) ) {
+				*strchr( skinname, '.' ) = 0;
+			}
 
 			// look for icon_????
 			if (!Q_stricmpn(skinname,"icon_",5))
@@ -477,8 +499,7 @@ static void PlayerModel_SetMenuItems( void )
 		pdest    = strstr(buffptr,"icon_");
 		if (pdest)
 		{
-			Q_strncpyz(modelskin,buffptr,pdest-buffptr+1);
-			strcat(modelskin,pdest + 5);
+			PlayerModel_ModelSkin( modelskin, sizeof( modelskin ), buffptr, pdest );
 		}
 		else
 			continue;
