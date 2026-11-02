@@ -495,6 +495,7 @@ CG_AddToTeamChat
 void CG_AddToTeamChat( char *str ) {
 	int len;
 	char *p, *ls;
+	char *lineStart;	// start of the line buffer p writes to
 	int lastcolor;
 	int chatHeight;
 	int maxWidth;
@@ -542,16 +543,22 @@ void CG_AddToTeamChat( char *str ) {
 	len = 0;
 
 	p = cgs.teamChatMsgs[cgs.teamChatPos % chatHeight];
+	lineStart = p;
 	*p = 0;
 
 	lastcolor = '7';
 
 	CG_OSPGetClientFontSize( &cf_Teamchat, &w, &h );
 	maxWidth = ( SCREEN_WIDTH - ( cg_drawTeamOverlay.integer == 2 ? cg.teamOverlayWidth : 0 ) ) / w;
+	if ( maxWidth > TEAMCHAT_WIDTH ) {
+		maxWidth = TEAMCHAT_WIDTH;	// a line buffer holds TEAMCHAT_WIDTH visible characters
+	}
 
 	ls = NULL;
 	while (*str) {
-		if (len > maxWidth - 1) {
+		// wrap on visible width, and also on raw bytes: colour pairs are copied without being
+		// counted, so a text made of colour codes would otherwise run past the line buffer
+		if (len > maxWidth - 1 || p - lineStart >= TEAMCHAT_WIDTH*3 - 2) {
 			if (ls) {
 				str -= (p - ls);
 				str++;
@@ -568,6 +575,7 @@ void CG_AddToTeamChat( char *str ) {
 			} else {
 				p = cgs.teamChatMsgs[cgs.teamChatPos % chatHeight];
 			}
+			lineStart = p;
 			*p = 0;
 			*p++ = Q_COLOR_ESCAPE;
 			*p++ = lastcolor;
