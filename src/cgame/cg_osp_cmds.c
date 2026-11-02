@@ -229,7 +229,8 @@ static void CG_OSPStuffOne( char *text ) {
 	}
 	if ( argc == 3 && ( !Q_stricmp( tok[0], "set" ) || !Q_stricmp( tok[0], "seta" ) ) ) {
 		if ( !Q_stricmp( tok[1], "g_synchronousclients" ) && ( !strcmp( tok[2], "0" ) || !strcmp( tok[2], "1" ) ) ) {
-			trap_Cvar_Set( "g_synchronousclients", tok[2] );
+			// through the command buffer, so that it stays in order with the record around it
+			trap_SendConsoleCommand( va( "set g_synchronousclients %s\n", tok[2] ) );
 			return;
 		}
 		if ( !Q_stricmp( tok[1], "name" ) && CG_OSPSafeFileName( tok[2], 35 ) ) {	// MAX_NETNAME - 1
