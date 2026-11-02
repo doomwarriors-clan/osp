@@ -1041,9 +1041,9 @@ double fabs( double x ) {
 #define is_digit(c)		((unsigned)to_digit(c) <= 9)
 #define to_char(n)		((n) + '0')
 
-// bounded output for Q_vsnprintf: end points at the byte reserved for the terminating NUL,
-// nothing is ever written at or past it
-#define BG_PUTC( buf, end, c )	do { if ( !( end ) || ( buf ) < ( end ) ) { *( buf )++ = ( c ); } } while ( 0 )
+// bounded output for vsnprintf: end points at the byte reserved for the terminating NUL,
+// nothing is written at or past it, but buf keeps counting (the C99 return value)
+#define BG_PUTC( buf, end, c )	do { if ( ( buf ) < ( end ) ) { *( buf ) = ( c ); } ( buf )++; } while ( 0 )
 
 void AddInt( char **buf_p, char *end, int val, int width, int flags ) {
 	char	text[32];
@@ -1221,7 +1221,7 @@ void AddString( char **buf_p, char *end, char *string, int width, int prec, int 
 }
 
 /*
-BG_vsnprintfCore (the formatter behind Q_vsnprintf)
+BG_vsnprintfCore (the formatter behind vsnprintf)
 
 I'm not going to support a bunch of the more arcane stuff in here
 just to keep it simpler.  For example, the '*' and '$' are not
@@ -1324,20 +1324,20 @@ reswitch:
 	}
 
 done:
-	*buf_p = 0;
+	*( buf_p < end ? buf_p : end ) = 0;
 	return buf_p - buffer;
 }
 
 /*
 ==================
-Q_vsnprintf
+vsnprintf
 
 Formats at most size - 1 characters into buffer and always NUL-terminates it (size > 0).
-Returns the number of characters written (not counting the NUL).
+Returns the length the full output would have had (not counting the NUL), like C99.
 ==================
 */
-int Q_vsnprintf( char *buffer, int size, const char *fmt, va_list argptr ) {
-	if ( size <= 0 ) {
+int vsnprintf( char *buffer, size_t size, const char *fmt, va_list argptr ) {
+	if ( size <= 0 ) {	// size_t is an int in the VM
 		return 0;
 	}
 	return BG_vsnprintfCore( buffer, buffer + size - 1, fmt, argptr );
