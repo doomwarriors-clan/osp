@@ -741,16 +741,8 @@ void ClientUserinfoChanged( int clientNum ) {
 		strcpy (userinfo, "\\name\\badinfo");
 	}
 
-	// check for local client: only from the connect-time userinfo, where the engine itself
-	// wrote the "ip" key; some engines keep a client-supplied "ip" on later updates
-	s = Info_ValueForKey( userinfo, "ip" );
-	if ( client->pers.connected == CON_CONNECTING && !strcmp( s, "localhost" ) ) {
-		client->pers.localClient = qtrue;
-		// OSP: a listen server can't do OSP authentication
-		if ( server_ospauth.integer ) {
-			trap_Cvar_Set( "server_ospauth", "2" );
-		}
-	}
+	// the local client is decided in ClientConnect, not from the "ip" key here: some engines
+	// keep a client-supplied "ip" in later userinfo updates
 
 	// OSP: version of the OSP client cgame
 	s = Info_ValueForKey( userinfo, "osp_client" );
@@ -1048,6 +1040,17 @@ char *ClientConnect( int clientNum, qboolean firstTime, qboolean isBot ) {
 	client->inactivityWarning = qfalse;
 	client->inactivityTime = level.time + 60000;
 	client->pers.followTeam = client->sess.coachTeam;
+
+	// check for local client. On the first connect the engine itself wrote the "ip" key; after a
+	// map change the userinfo may carry a client-supplied one, so use the address kept in the session
+	value = firstTime ? Info_ValueForKey( userinfo, "ip" ) : client->sess.ip;
+	if ( !strcmp( value, "localhost" ) ) {
+		client->pers.localClient = qtrue;
+		// OSP: a listen server can't do OSP authentication
+		if ( server_ospauth.integer ) {
+			trap_Cvar_Set( "server_ospauth", "2" );
+		}
+	}
 
 	// get and distribute relevent paramters
 	G_LogPrintf( "ClientConnect: %i\n", clientNum );
