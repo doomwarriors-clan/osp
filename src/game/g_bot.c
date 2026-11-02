@@ -175,8 +175,7 @@ void G_LoadArenas( void ) {
 	dirptr  = dirlist;
 	for (i = 0; i < numdirs; i++, dirptr += dirlen+1) {
 		dirlen = strlen(dirptr);
-		strcpy(filename, "scripts/");
-		strcat(filename, dirptr);
+		Com_sprintf(filename, sizeof(filename), "scripts/%s", dirptr);	// pk3 entry names can exceed the buffer
 		G_LoadArenasFromFile(filename);
 	}
 	trap_Printf( va( "%i arenas parsed\n", g_numArenas ) );
@@ -938,8 +937,7 @@ static void G_LoadBots( void ) {
 	dirptr  = dirlist;
 	for (i = 0; i < numdirs; i++, dirptr += dirlen+1) {
 		dirlen = strlen(dirptr);
-		strcpy(filename, "scripts/");
-		strcat(filename, dirptr);
+		Com_sprintf(filename, sizeof(filename), "scripts/%s", dirptr);	// pk3 entry names can exceed the buffer
 		G_LoadBotsFromFile(filename);
 	}
 	trap_Printf( va( "%i bots parsed\n", g_numBots ) );

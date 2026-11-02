@@ -81,6 +81,15 @@ void UI_InitMemory( void ) {
 UI_ParseInfos
 ===============
 */
+// replaces characters that would break a console command built from an info value
+static void UI_CleanInfoToken( char *s ) {
+	for ( ; *s; s++ ) {
+		if ( *s < ' ' || *s == '"' || *s == ';' || *s == '$' ) {
+			*s = ' ';
+		}
+	}
+}
+
 int UI_ParseInfos( char *buf, int max, char *infos[] ) {
 	char	*token;
 	int		count;
@@ -120,6 +129,10 @@ int UI_ParseInfos( char *buf, int max, char *infos[] ) {
 			if ( !token[0] ) {
 				strcpy( token, "<NULL>" );
 			}
+			// values end up in console commands (map, spmap, addbot): a quoted token may carry
+			// line breaks or quotes, which Cbuf treats as command separators
+			UI_CleanInfoToken( key );
+			UI_CleanInfoToken( token );
 			Info_SetValueForKey( info, key, token );
 		}
 		//NOTE: extra space for arena number
@@ -192,8 +205,7 @@ static void UI_LoadArenas( void ) {
 	dirptr  = dirlist;
 	for (i = 0; i < numdirs; i++, dirptr += dirlen+1) {
 		dirlen = strlen(dirptr);
-		strcpy(filename, "scripts/");
-		strcat(filename, dirptr);
+		Com_sprintf(filename, sizeof(filename), "scripts/%s", dirptr);	// pk3 entry names can exceed the buffer
 		UI_LoadArenasFromFile(filename);
 	}
 	trap_Print( va( "%i arenas parsed\n", ui_numArenas ) );
@@ -379,8 +391,7 @@ static void UI_LoadBots( void ) {
 	dirptr  = dirlist;
 	for (i = 0; i < numdirs; i++, dirptr += dirlen+1) {
 		dirlen = strlen(dirptr);
-		strcpy(filename, "scripts/");
-		strcat(filename, dirptr);
+		Com_sprintf(filename, sizeof(filename), "scripts/%s", dirptr);	// pk3 entry names can exceed the buffer
 		UI_LoadBotsFromFile(filename);
 	}
 	trap_Print( va( "%i bots parsed\n", ui_numBots ) );
