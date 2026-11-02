@@ -127,8 +127,9 @@ void CG_OSPClientAuth_f( void ) {
 	trap_SendClientCommand( va( "htuatneilc %s", str ) );
 }
 
-// a demo / screenshot name sent by the server: trims blanks and refuses anything that could
-// break out of a quoted console argument, expand a cvar or leave the target directory
+// a demo / screenshot name sent by the server: trims blanks and refuses only what could end the
+// quoted console argument or leave the target directory. The server's OSP_SanitizeFilename keeps
+// every other byte of the player and host names (0x01-0xff, "..", "$"), so those must pass
 static qboolean CG_OSPSafeFileName( char *name, int maxLen ) {
 	char	*p;
 	int		len;
@@ -140,12 +141,11 @@ static qboolean CG_OSPSafeFileName( char *name, int maxLen ) {
 	while ( len > 0 && name[len - 1] == ' ' ) {
 		name[--len] = 0;
 	}
-	if ( !len || len > maxLen || strstr( name, ".." ) ) {
+	if ( !len || len > maxLen ) {
 		return qfalse;
 	}
 	for ( p = name; *p; p++ ) {
-		if ( *p < ' ' || *p > '~' || *p == '"' || *p == ';' || *p == '\\' || *p == '/' || *p == ':' ||
-			*p == '*' || *p == '?' || *p == '<' || *p == '>' || *p == '|' || *p == '$' || *p == '`' ) {
+		if ( *p == '"' || *p == '\n' || *p == '\r' || *p == ';' || *p == '\\' || *p == '/' || *p == ':' ) {
 			return qfalse;
 		}
 	}
