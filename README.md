@@ -1,11 +1,6 @@
-# xq3osp
-> ⚠️ **Important:** the original **OSP 1.03a** QVMs have security bugs, especially dangerous in network
-> games. A malicious player or server can crash the game, corrupt its memory or run console commands.
-> Use the [1.03a-secured](https://github.com/JKornev/xq3osp/releases/tag/1.03a-secured) release
-> instead, where these bugs are fixed (sources on the
-> [`security-patches`](https://github.com/JKornev/xq3osp/tree/security-patches) branch). This branch (`main`) keeps the byte-identical sources as a proof of concept and for learning purposes.
+# osp
 
-**Quake 3 Arena OSP mod** (recovered, byte-identical)
+**Quake 3 Arena OSP mod** (recovered, byte-identical, security patched, bot learning added)
 
 This is a reverse-engineered source code of **OSP Tourney DM/CA/CTF 1.03a** mod for Quake III
 Arena, the mod by the OrangeSmoothie team whose source was never
@@ -19,34 +14,9 @@ id Software's original 1.32b `q3lcc` and `q3asm`, the sources produce files that
 | `cgame` (client) | `zz-osp-pak3.pk3`, 28 Feb 2003 | `48e17665b0b274baa95670364364be373fbbda4aea6e74c1fb587aaa5feb33b3` |
 | `ui` (menus) | `zz-osp-pak1.pk3`, 13 Jan 2002 | `36133dea02f56992a8683f852893a414e330cc87063895671ee268b51891147c` |
 
-
 ## Build
 
-Only Docker is needed on the host: Docker Desktop on Windows, Docker Engine on Linux.
-Run everything from the repository root.
-
-Build the toolchain image once (id's 1.32b `q3lcc` and `q3asm`, built from `src/tools`):
-
-```sh
-docker build -f docker/Dockerfile -t xq3osp-build .
-```
-
-Then build a module (`MODULE` is `qagame`, `cgame` or `ui`). The same command works in
-PowerShell and in Linux shells:
-
-```sh
-docker run --rm -v "${PWD}:/work" -w /work xq3osp-build make -C build MODULE=qagame all
-```
-
-The result is `build/vm/<module>.qvm`. To use it, pack it into a pk3 as `vm/<module>.qvm`
-in the mod folder.
-
-| Target | What it does |
-|---|---|
-| `all` (default) | compile and link `build/vm/<module>.qvm`; incremental, only changed files are rebuilt |
-| `info` | build and print the QVM's size and SHA-256 |
-| `verify` | clean build, then compare the SHA-256 with the shipped QVM's hash (`EXPECTED_SHA256` in `build/<module>.mk`); `verify: OK` or `verify: FAIL` with non-zero exit |
-| `clean` / `clean-all` | remove one module's outputs / all outputs |
+TODO: you need a tool chain (lcc, etc.). Currently, it's build locally with a local 32-bit lcc (since id software used 32-bit lcc). We need to check if 64-bit lcc is a better choice.
 
 ## Credits
 
