@@ -1,0 +1,2 @@
+dd4bb6ce5cf5bd4ff15c1b8ac70d2ed1f0345ff5e5d7a68b8241820ddf6231ce  zz-osp-pak5.pk3
+b499c55ef17f57f2462664afb4b885afcc7a79ca428407b5a2f7a88daae43a56  zz-osp-server4.pk3

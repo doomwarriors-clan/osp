@@ -7,3 +7,5 @@
 # Never commit id Software or OSP game assets
 *.pk3
 *.qvm
+# Exception: the release pk3s rebuilt from THESE sources (freeware, no game assets)
+!releases/pk3/*.pk3
