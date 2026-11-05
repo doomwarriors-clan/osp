@@ -1,6 +1,6 @@
-# xq3osp
+# osp
 
-Quake 3 OSP mod (recovered, byte-identical)
+**Quake 3 Arena OSP mod** (recovered, byte-identical, security patched, bot learning added)
 
 This is a reverse-engineered source code of **OSP Tourney DM/CA/CTF 1.03a** mod for Quake III
 Arena, the mod by the OrangeSmoothie team whose source was never
@@ -16,31 +16,7 @@ id Software's original 1.32b `q3lcc` and `q3asm`, the sources produce files that
 
 ## Build
 
-Only Docker is needed on the host: Docker Desktop on Windows, Docker Engine on Linux.
-Run everything from the repository root.
-
-Build the toolchain image once (id's 1.32b `q3lcc` and `q3asm`, built from `src/tools`):
-
-```sh
-docker build -f docker/Dockerfile -t xq3osp-build .
-```
-
-Then build a module (`MODULE` is `qagame`, `cgame` or `ui`). The same command works in
-PowerShell and in Linux shells:
-
-```sh
-docker run --rm -v "${PWD}:/work" -w /work xq3osp-build make -C build MODULE=qagame all
-```
-
-The result is `build/vm/<module>.qvm`. To use it, pack it into a pk3 as `vm/<module>.qvm`
-in the mod folder.
-
-| Target | What it does |
-|---|---|
-| `all` (default) | compile and link `build/vm/<module>.qvm`; incremental, only changed files are rebuilt |
-| `info` | build and print the QVM's size and SHA-256 |
-| `verify` | clean build, then compare the SHA-256 with the shipped QVM's hash (`EXPECTED_SHA256` in `build/<module>.mk`); `verify: OK` or `verify: FAIL` with non-zero exit |
-| `clean` / `clean-all` | remove one module's outputs / all outputs |
+TODO: you need a tool chain (lcc, etc.). Currently, it's build locally with a local 32-bit lcc (since id software used 32-bit lcc). We need to check if 64-bit lcc is a better choice.
 
 ## Security fixes
 
