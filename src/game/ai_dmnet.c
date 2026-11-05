@@ -155,6 +155,7 @@ BotGoForAir
 */
 int BotGoForAir(bot_state_t *bs, int tfl, bot_goal_t *ltg, float range) {
 	bot_goal_t goal;
+	int ret;	// OSP 1.04b botmem: the botmem hook fires on every NBG call (see below)
 
 	//if the bot needs air
 	if (bs->lastair_time < FloatTime() - 6) {
@@ -169,7 +170,15 @@ int BotGoForAir(bot_state_t *bs, int tfl, bot_goal_t *ltg, float range) {
 		}
 		else {
 			//get a nearby goal outside the water
-			while(trap_BotChooseNBGItem(bs->gs, bs->origin, bs->inventory, tfl, ltg, range)) {
+			// OSP 1.04b botmem: the hook fires on EVERY NBG call, including the
+			// final one that finds no goal (decompiled build behavior)
+			while (1) {
+				ret = trap_BotChooseNBGItem(bs->gs, bs->origin, bs->inventory, tfl, ltg, range);
+				BotMem_LogDecision(bs, 1);
+				BotMem_BotLearn(bs);
+				if (!ret) {
+					break;
+				}
 				trap_BotGetTopGoal(bs->gs, &goal);
 				//if the goal is not in water
 				if (!(trap_AAS_PointContents(goal.origin) & (CONTENTS_WATER|CONTENTS_SLIME|CONTENTS_LAVA))) {
@@ -204,6 +213,9 @@ int BotNearbyGoal(bot_state_t *bs, int tfl, bot_goal_t *ltg, float range) {
 	}
 	//
 	ret = trap_BotChooseNBGItem(bs->gs, bs->origin, bs->inventory, tfl, ltg, range);
+	// OSP 1.04b botmem: fire on every NBG call (decompiled build behavior)
+	BotMem_LogDecision(bs, 1);
+	BotMem_BotLearn(bs);
 	/*
 	if (ret)
 	{
@@ -276,6 +288,8 @@ BotGetItemLongTermGoal
 ==================
 */
 int BotGetItemLongTermGoal(bot_state_t *bs, int tfl, bot_goal_t *goal) {
+	int ret;	// OSP 1.04b botmem: the botmem hook fires on the result of the choose call
+
 	//if the bot has no goal
 	if (!trap_BotGetTopGoal(bs->gs, goal)) {
 		//BotAI_Print(PRT_MESSAGE, "no ltg on stack\n");
@@ -293,7 +307,12 @@ int BotGetItemLongTermGoal(bot_state_t *bs, int tfl, bot_goal_t *goal) {
 		//BotAI_Print(PRT_MESSAGE, "%s: choosing new ltg\n", ClientName(bs->client, netname, sizeof(netname)));
 		//choose a new goal
 		//BotAI_Print(PRT_MESSAGE, "%6.1f client %d: BotChooseLTGItem\n", FloatTime(), bs->client);
-		if (trap_BotChooseLTGItem(bs->gs, bs->origin, bs->inventory, tfl)) {
+		ret = trap_BotChooseLTGItem(bs->gs, bs->origin, bs->inventory, tfl);
+		// OSP 1.04b botmem: fire on every LTG call, regardless of the result
+		// (decompiled build behavior)
+		BotMem_LogDecision(bs, 0);
+		BotMem_BotLearn(bs);
+		if (ret) {
 			/*
 			char buf[128];
 			//get the goal at the top of the stack

@@ -19,7 +19,7 @@ QA_SRC = \
  g_trigger g_utils g_weapon \
  g_osp_admin g_osp_bot g_osp_cmds g_osp_config g_osp_customgfx g_osp_decals \
  g_osp_main g_osp_maps g_osp_motd g_osp_multiview g_osp_referee g_osp_restrict \
- g_osp_svcmds g_osp_team g_osp_viewcam g_osp_vote
+ g_osp_svcmds g_osp_team g_osp_viewcam g_osp_vote g_botmem
 
 # UI_SRC: OSP ui order: id's q3_ui.q3asm order, i.e. ui.q3asm without ui_loadconfig /
 # ui_saveconfig. bg_misc, bg_lib, q_math and q_shared come from src/game (-DQ3UI);

@@ -1376,10 +1376,32 @@ int		trap_GeneticParentsAndChildSelection(int numranks, float *ranks, int *paren
 
 void	trap_SnapVector( float *v );
 
+// OSP 1.04b botmem: the DWC engine syscalls (doomwarriors-clan/Quake3e, appended at
+// the end of the gameImport_t enum; QVM trap numbers are -(enum+1)). The QVM probes
+// them at G_Init via trap_GetValue (the "_DWC" names in SV_GetValue) and runs in
+// log-only mode on engines without them.
+int		trap_GetValue( char *value, int valueSize, const char *key );
+int		trap_BotGoalWeightConfigPtr( int goalstate );
+int		trap_BotLoadGoalFuzzyLogic( int goalstate, const char *filename );
+// the 3rd arg: the engine reads the raw 32 QVM bits as a float (VMF), so pass the float
+void		trap_BotScaleGoalWeight( int goalstate, const char *name, float scale );
+void		trap_BotGoalClassName( int goalstate, char *name, int size );
 
 // OSP declarations used by the id code, with the argument names / types of the call sites.
 // Only initialised (data) globals and functions are declared here: an extern
 // of a bss global changes lcc's bss order in its defining file (see the cvar list above).
+
+// OSP 1.04b botmem (g_botmem.c): bot goal-decision memory - the per-map .mem decision
+// log, the per-map learn files (v1/v2), band-aware goal-weight scaling and paramount
+// map tactics. Hooked as the first statement of G_InitGame / G_ShutdownGame / G_RunFrame
+// and at the three goal-choose sites in ai_dmnet.c (BotMem_LogDecision + BotMem_BotLearn).
+struct bot_state_s;
+void	BotMem_InitGame( void );
+void	BotMem_Frame( void );
+void	BotMem_MapEnd( void );
+void	BotMem_MapStart( void );
+void	BotMem_BotLearn( struct bot_state_s *bs );
+void	BotMem_LogDecision( struct bot_state_s *bs, int kind );
 
 // OSP's freeze tag is team deathmatch with server_freezetag set (the
 // expansion is visible in AddScore's code)

@@ -651,6 +651,8 @@ G_InitGame
 void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	int					i;
 
+	BotMem_InitGame();	// OSP 1.04b botmem (first statement, like the decompiled build)
+
 	G_Printf ("------- Game Initialization -------\n");
 
 	srand( randomSeed );
@@ -791,6 +793,8 @@ G_ShutdownGame
 =================
 */
 void G_ShutdownGame( int restart ) {
+	BotMem_MapEnd();	// OSP 1.04b botmem (first statement, like the decompiled build)
+
 	G_Printf ("==== ShutdownGame ====\n");
 
 	if ( level.logFile ) {
@@ -2529,6 +2533,8 @@ void G_RunFrame( int levelTime ) {
 	int			i;
 	gentity_t	*ent;
 	int			msec;
+
+	BotMem_Frame();	// OSP 1.04b botmem (first statement, like the decompiled build)
 
 	// if we are waiting for the level to restart, do nothing
 	if ( level.restarted ) {

@@ -222,4 +222,14 @@ equ trap_BotLibLoadSource				-579
 equ trap_BotLibFreeSource				-580
 equ trap_BotLibReadToken				-581
 equ trap_BotLibSourceFileAndLine		-582
+
+; OSP 1.04b botmem: the DWC engine syscalls (doomwarriors-clan/Quake3e), appended at the
+; END of the engine's gameImport_t enum (after the stock G_TRAP_GETVALUE) so no stock
+; trap numbers shift. The QVM probes them at G_Init via trap_GetValue (the "_DWC" names
+; in SV_GetValue) and runs in log-only mode on engines without them.
+equ trap_GetValue						-701
+equ trap_BotGoalWeightConfigPtr			-702
+equ trap_BotLoadGoalFuzzyLogic			-703
+equ trap_BotScaleGoalWeight				-704
+equ trap_BotGoalClassName				-705
  
