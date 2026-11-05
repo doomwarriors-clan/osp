@@ -1,0 +1,45 @@
+OSP Tourney DM/CA/CTF 1.03a-dwc
+================================
+
+OSP Tourney 1.03a with security fixes and the DoomWarriors bot learning
+extension ("botmem"), built from the xq3osp sources:
+
+  https://github.com/doomwarriors-clan/osp
+  (fork of https://github.com/JKornev/xq3osp)
+
+xq3osp is reverse-engineered source code of OSP Tourney 1.03a, restored from
+the QVMs OSP shipped in 2002 and 2003. The security fixes address
+memory-safety and input-validation bugs that a malicious player or server
+could use to crash the game, corrupt its memory or run console commands.
+The botmem extension lets the bots learn per-map item/goal weights; it is
+gated by the bot_memory cvar (off by default) and is a no-op unless the
+engine provides the matching botmem syscalls. Gameplay is unchanged.
+
+Files
+-----
+
+  zz-osp-pak5.pk3      client: vm/cgame.qvm, vm/ui.qvm
+                       (replaces the QVMs from zz-osp-pak0..pak4)
+  zz-osp-server4.pk3   server: vm/qagame.qvm (security fixes + botmem)
+                       (replaces the QVM from zz-osp-server0..server3b)
+
+Put both files in the osp folder, next to the original OSP pk3s. They need
+the original zz-osp-pak*.pk3 files for maps, models, sounds and menus.
+SHA256SUMS.txt in the release lists the hashes of the QVMs and pk3s.
+
+Credits
+-------
+
+  OSP Tourney by the OrangeSmoothie team
+
+  Bot learning extension by the DoomWarriors clan (dwc.motter)
+
+xq3osp restoration would not have been possible without:
+
+  BigIndian        https://github.com/snems/BigIndian
+  OSP2             https://github.com/snems/OSP2
+  q3vm             https://github.com/brugal/q3vm
+  baseq3a          https://github.com/ec-/baseq3a
+  Quake III Arena 1.32b source by id Software
+                   https://github.com/id-Software/Quake-III-Arena
+  dlmalloc by Doug Lea

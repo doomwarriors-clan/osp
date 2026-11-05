@@ -56,6 +56,28 @@ jobs:
           (cd dist && zip -r "xq3osp-${ver}-qvm.zip" vm SHA256SUMS.txt)
           echo "ver=$ver" >> "$GITHUB_ENV"
 
+      - name: Package pk3s
+        run: |
+          # The pk3s attached to the release: same names and entry layout
+          # (vm/ + docs/) as JKornev/xq3osp's 1.03a-secured release, so
+          # doomwarriors-clan/q3-servers' install script can swap the source.
+          python3 - <<'PYEOF'
+          import os, zipfile
+          pk3s = (
+              ("zz-osp-server4.pk3", ("vm/qagame.qvm",)),
+              ("zz-osp-pak5.pk3", ("vm/cgame.qvm", "vm/ui.qvm")),
+          )
+          for name, qvms in pk3s:
+              with zipfile.ZipFile(os.path.join("dist", name), "w", zipfile.ZIP_DEFLATED) as z:
+                  z.writestr(zipfile.ZipInfo("vm/"), b"")
+                  for q in qvms:
+                      z.write(os.path.join("build", q), q)
+                  z.writestr(zipfile.ZipInfo("docs/"), b"")
+                  z.write("docs/xq3osp.txt", "docs/xq3osp.txt")
+              print("built dist/" + name)
+          PYEOF
+          (cd dist && sha256sum zz-osp-*.pk3 >> SHA256SUMS.txt && cat SHA256SUMS.txt)
+
       - uses: actions/upload-artifact@v4
         with:
           name: xq3osp-${{ env.ver }}-qvm
@@ -80,15 +102,21 @@ jobs:
         with:
           name: OSP Tourney ${{ github.ref_name }}
           body: |
-            OSP Tourney QVMs (`qagame`, `cgame`, `ui`) built from the recovered
-            sources at ${{ github.ref_name }}, with changes on top of OSP 1.03a
-            (security fixes). The files are not byte-identical to the original
-            release; `SHA256SUMS.txt` lists the hashes of this build.
+            OSP Tourney QVMs (`qagame`, `cgame`, `ui`) and pk3s built from the
+            clan sources at ${{ github.ref_name }} (JKornev/xq3osp with security
+            fixes; the `qagame` additionally carries the DoomWarriors bot
+            learning extension "botmem"). The files are not byte-identical to
+            the original 1.03a release; `SHA256SUMS.txt` lists the hashes of
+            this build.
 
-            Drop the `vm/` folder into a pk3 (a zip renamed to `.pk3`) in your `osp`
-            mod directory, or use the attached zip as is.
+            Servers: drop `zz-osp-server4.pk3` (qagame) into the `osp` mod
+            directory, next to the original OSP pk3s. Clients get
+            `zz-osp-pak5.pk3` (cgame, ui). Or use the attached zip / loose QVMs
+            as is.
           files: |
             dist/xq3osp-*-qvm.zip
+            dist/zz-osp-server4.pk3
+            dist/zz-osp-pak5.pk3
             dist/vm/*.qvm
             dist/SHA256SUMS.txt
           fail_on_unmatched_files: true
