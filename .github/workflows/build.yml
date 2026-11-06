@@ -24,9 +24,9 @@ permissions:
 jobs:
   qvm:
     name: build QVMs
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build toolchain image
         run: docker build -f docker/Dockerfile -t xq3osp-build .
@@ -87,7 +87,7 @@ jobs:
           (cd stage && zip -X -r "../dist/${pk3}" vm docs)
           (cd dist && sha256sum "${pk3}" >> SHA256SUMS.txt && cat SHA256SUMS.txt)
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: xq3osp-${{ env.ver }}-qvm
           path: dist
@@ -97,17 +97,17 @@ jobs:
     name: attach to release
     needs: qvm
     if: github.ref_type == 'tag' && startsWith(github.ref_name, '1.03a-dwc.')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: xq3osp-*-qvm
           merge-multiple: true
           path: dist
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           name: OSP Tourney ${{ github.ref_name }}
           body: |
