@@ -31,7 +31,7 @@ Maintainers: Micha (`n4cer`) and Hannes (`dwc-motter`), both org owners.
   against JKornev/xq3osp unless a maintainer asks for it (security fixes we
   find are welcome there, but agreed first).
 - Never commit built files (`*.qvm`, `*.pk3`, zips). They are release assets.
-- Commit messages in English.
+- English everywhere: commit messages, PR texts, README and other docs, and code comments. Existing German comments are translated when a file is touched anyway.
 
 ## Rules for the code
 
