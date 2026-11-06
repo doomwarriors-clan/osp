@@ -56,27 +56,36 @@ jobs:
           (cd dist && zip -r "xq3osp-${ver}-qvm.zip" vm SHA256SUMS.txt)
           echo "ver=$ver" >> "$GITHUB_ENV"
 
-      - name: Package pk3s
+      - name: Check that the client QVMs are JKornev's 1.03a-secured
         run: |
-          # The pk3s attached to the release: same names and entry layout
-          # (vm/ + docs/) as JKornev/xq3osp's 1.03a-secured release, so
-          # doomwarriors-clan/q3-servers' install script can swap the source.
-          python3 - <<'PYEOF'
-          import os, zipfile
-          pk3s = (
-              ("zz-osp-server4.pk3", ("vm/qagame.qvm",)),
-              ("zz-osp-pak5.pk3", ("vm/cgame.qvm", "vm/ui.qvm")),
-          )
-          for name, qvms in pk3s:
-              with zipfile.ZipFile(os.path.join("dist", name), "w", zipfile.ZIP_DEFLATED) as z:
-                  z.writestr(zipfile.ZipInfo("vm/"), b"")
-                  for q in qvms:
-                      z.write(os.path.join("build", q), q)
-                  z.writestr(zipfile.ZipInfo("docs/"), b"")
-                  z.write("docs/xq3osp.txt", "docs/xq3osp.txt")
-              print("built dist/" + name)
-          PYEOF
-          (cd dist && sha256sum zz-osp-*.pk3 >> SHA256SUMS.txt && cat SHA256SUMS.txt)
+          # Only qagame carries DoomWarriors changes. cgame and ui must stay
+          # byte-identical to JKornev/xq3osp 1.03a-secured, so clients keep
+          # using its zz-osp-pak5.pk3 and no second client pk3 with other
+          # content is needed. Changing client code is a deliberate decision
+          # (own client pk3 with its own name); then update this check.
+          cat > secured.sha256 <<'EOF'
+          fa3cbd913fbd5261bf463dd207ea2ef7be2d9ab7b723aff717b0ce6da02099b1  build/vm/cgame.qvm
+          118d98fab3623398a89178ae8e6d072967166206b15b238c95d95555fd326d64  build/vm/ui.qvm
+          EOF
+          sha256sum -c secured.sha256
+
+      - name: Package server pk3
+        run: |
+          # Our qagame in a pk3 of its own name, sorted after zz-osp-* so it
+          # overrides zz-osp-server4.pk3 of 1.03a-secured. Never reuse an
+          # OSP or xq3osp file name: clients that have a pk3 of the same name
+          # with other content fail the pure check.
+          # Tag 1.03a-dwc.N -> zzz-osp-dwcN.pk3, other builds -> zzz-osp-dwc-<sha>.pk3
+          if [[ "${GITHUB_REF_TYPE}" == tag && "${GITHUB_REF_NAME}" =~ ^1\.03a-dwc\.([0-9]+)$ ]]; then
+            pk3="zzz-osp-dwc${BASH_REMATCH[1]}.pk3"
+          else
+            pk3="zzz-osp-dwc-${GITHUB_SHA::7}.pk3"
+          fi
+          rm -rf stage && mkdir -p stage/vm stage/docs
+          cp build/vm/qagame.qvm stage/vm/
+          cp docs/xq3osp.txt stage/docs/
+          (cd stage && zip -X -r "../dist/${pk3}" vm docs)
+          (cd dist && sha256sum "${pk3}" >> SHA256SUMS.txt && cat SHA256SUMS.txt)
 
       - uses: actions/upload-artifact@v4
         with:
@@ -87,7 +96,7 @@ jobs:
   release:
     name: attach to release
     needs: qvm
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, '1.03a-dwc.')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -102,21 +111,20 @@ jobs:
         with:
           name: OSP Tourney ${{ github.ref_name }}
           body: |
-            OSP Tourney QVMs (`qagame`, `cgame`, `ui`) and pk3s built from the
-            clan sources at ${{ github.ref_name }} (JKornev/xq3osp with security
-            fixes; the `qagame` additionally carries the DoomWarriors bot
-            learning extension "botmem"). The files are not byte-identical to
-            the original 1.03a release; `SHA256SUMS.txt` lists the hashes of
-            this build.
+            OSP Tourney ${{ github.ref_name }}: the server module (`qagame`)
+            built from JKornev/xq3osp `security-patches` plus the DoomWarriors
+            bot learning extension "botmem". `cgame` and `ui` are unchanged and
+            byte-identical to
+            [1.03a-secured](https://github.com/JKornev/xq3osp/releases/tag/1.03a-secured)
+            (checked in the build). `SHA256SUMS.txt` lists the hashes.
 
-            Servers: drop `zz-osp-server4.pk3` (qagame) into the `osp` mod
-            directory, next to the original OSP pk3s. Clients get
-            `zz-osp-pak5.pk3` (cgame, ui). Or use the attached zip / loose QVMs
-            as is.
+            Servers: put the `zzz-osp-dwc*.pk3` (qagame) into the `osp` mod
+            directory, next to the original OSP pk3s and the two pk3s of
+            1.03a-secured (`zz-osp-server4.pk3`, `zz-osp-pak5.pk3`). Clients
+            need nothing beyond 1.03a-secured's `zz-osp-pak5.pk3`.
           files: |
             dist/xq3osp-*-qvm.zip
-            dist/zz-osp-server4.pk3
-            dist/zz-osp-pak5.pk3
+            dist/zzz-osp-dwc*.pk3
             dist/vm/*.qvm
             dist/SHA256SUMS.txt
           fail_on_unmatched_files: true

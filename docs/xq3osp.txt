@@ -18,13 +18,16 @@ engine provides the matching botmem syscalls. Gameplay is unchanged.
 Files
 -----
 
-  zz-osp-pak5.pk3      client: vm/cgame.qvm, vm/ui.qvm
-                       (replaces the QVMs from zz-osp-pak0..pak4)
-  zz-osp-server4.pk3   server: vm/qagame.qvm (security fixes + botmem)
-                       (replaces the QVM from zz-osp-server0..server3b)
+  zzz-osp-dwcN.pk3     server: vm/qagame.qvm (security fixes + botmem)
+                       (overrides the qagame of zz-osp-server*.pk3)
 
-Put both files in the osp folder, next to the original OSP pk3s. They need
-the original zz-osp-pak*.pk3 files for maps, models, sounds and menus.
+Put it in the osp folder of the server, next to the original OSP pk3s and
+the two pk3s of 1.03a-secured (zz-osp-server4.pk3, zz-osp-pak5.pk3):
+
+  https://github.com/JKornev/xq3osp/releases/tag/1.03a-secured
+
+cgame and ui are unchanged and byte-identical to 1.03a-secured, so clients
+use its zz-osp-pak5.pk3; there is no client pk3 of our own.
 SHA256SUMS.txt in the release lists the hashes of the QVMs and pk3s.
 
 Credits
