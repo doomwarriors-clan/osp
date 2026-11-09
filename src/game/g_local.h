@@ -1392,9 +1392,12 @@ void		trap_BotGoalClassName( int goalstate, char *name, int size );
 // of a bss global changes lcc's bss order in its defining file (see the cvar list above).
 
 // OSP 1.04b botmem (g_botmem.c): bot goal-decision memory - the per-map .mem decision
-// log, the per-map learn files (v1/v2), band-aware goal-weight scaling and paramount
-// map tactics. Hooked as the first statement of G_InitGame / G_ShutdownGame / G_RunFrame
-// and at the three goal-choose sites in ai_dmnet.c (BotMem_LogDecision + BotMem_BotLearn).
+// log, the per-map learn files (v1/v2/v3), band-aware goal-weight scaling, paramount
+// map tactics and combat-weapon learning (issue #2). Hooked as the first statement
+// of G_InitGame / G_ShutdownGame / G_RunFrame, at the three goal-choose sites in
+// ai_dmnet.c (BotMem_LogDecision + BotMem_BotLearn), at the end of BotChooseWeapon
+// in ai_dmq3.c (BotMem_FightWeapon) and in OSP_BotChooseWeaponByRange
+// (BotMem_FightGate).
 struct bot_state_s;
 void	BotMem_InitGame( void );
 void	BotMem_Frame( void );
@@ -1402,6 +1405,8 @@ void	BotMem_MapEnd( void );
 void	BotMem_MapStart( void );
 void	BotMem_BotLearn( struct bot_state_s *bs );
 void	BotMem_LogDecision( struct bot_state_s *bs, int kind );
+void	BotMem_FightWeapon( struct bot_state_s *bs );
+int		BotMem_FightGate( int botnum, int weapon );
 
 // OSP's freeze tag is team deathmatch with server_freezetag set (the
 // expansion is visible in AddScore's code)

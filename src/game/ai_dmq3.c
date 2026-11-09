@@ -1636,15 +1636,18 @@ int OSP_BotChooseWeaponByRange(bot_state_t *bs) {
 	for (i = 0; i < sizeof(osp_botWeaponRanges) / sizeof(osp_botWeaponRanges[0]); i++) {
 		if (dist > osp_botWeaponRanges[i].mindist && dist < osp_botWeaponRanges[i].maxdist
 			&& ((1 << weapon) & osp_botWeaponRanges[i].prevWeapons)
-			&& OSP_BotHasWeaponAndAmmo(bs, osp_botWeaponRanges[i].weapon)) {
+			&& OSP_BotHasWeaponAndAmmo(bs, osp_botWeaponRanges[i].weapon)
+			&& BotMem_FightGate(bs->client, osp_botWeaponRanges[i].weapon) == 0) {
 			weapon = osp_botWeaponRanges[i].weapon;
 		}
 	}
 	if (bs->inventory[ENEMY_HEIGHT] > 48) {
-		if (OSP_BotHasWeaponAndAmmo(bs, WP_RAILGUN) && dist > 200) {
+		if (OSP_BotHasWeaponAndAmmo(bs, WP_RAILGUN) && dist > 200
+			&& BotMem_FightGate(bs->client, WP_RAILGUN) == 0) {
 			weapon = WP_RAILGUN;
 		}
-		else if (OSP_BotHasWeaponAndAmmo(bs, WP_LIGHTNING)) {
+		else if (OSP_BotHasWeaponAndAmmo(bs, WP_LIGHTNING)
+			&& BotMem_FightGate(bs->client, WP_LIGHTNING) == 0) {
 			weapon = WP_LIGHTNING;
 		}
 	}
@@ -1670,6 +1673,11 @@ void BotChooseWeapon(bot_state_t *bs) {
 		//BotAI_Print(PRT_MESSAGE, "bs->weaponnum = %d\n", bs->weaponnum);
 		trap_EA_SelectWeapon(bs->client, bs->weaponnum);
 	}
+	/* Combat-weapon learning (2026-11-09, clan issue #2): record the bot's
+	   current combat decision (bs->weaponnum) for the botmem outcome loop.
+	   Fires on every call, both branches (weapon change simply overwrites
+	   the pending entry). No-op when botmem is off. */
+	BotMem_FightWeapon(bs);
 }
 
 /*
