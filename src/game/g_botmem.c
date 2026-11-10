@@ -53,6 +53,27 @@ ps.persistant[PERS_SCORE] @ 248; in this tree PERS_SCORE = 0 - there is
 no PERS_STATE). The .mem and learn-file formats are unchanged, so the
 knowledge accumulated by the decompiled osp1.04b build carries over.
 
+Combat-weapon learning (2026-11-09, clan issue #2): OSP's fight weapon is
+chosen by the hardcoded distance table (OSP_BotChooseWeaponByRange in
+ai_dmq3.c) - the _w.c/fw_weap.c weapon weights are never read for it. So the
+QVM learns per (bot, weapon 1..9, health band, map) whether holding a weapon
+correlates with kills (good) or deaths (bad), and BotMem_FightGate rejects
+weapons with a persistently bad record inside the distance table (and both
+height-override branches). Rejection only, no forcing (the table has no
+weight channel). Pending combat decisions are recorded by BotMem_FightWeapon
+(hook at the end of BotChooseWeapon, fired on every call, ~10x/s per bot
+while fighting) and resolved every frame in BotMem_Frame: score up (kill)
+-> good, score down while alive (teamkill) -> bad, death -> bad; a weapon
+change or 60 s without any combat event -> expire, no count (holding without
+fighting is not a combat signal - deliberate difference to the goal side,
+where 60 s survival counts as good). Counters persist per map in the learn
+file v3
+("learn3", 97030 B, v1/v2 load unchanged); .mem tags fdec/fgood/fbad; flearn
+lines at map end (BotMem_MapEnd, works in log-only mode); cvars
+botmem_fight_min (3) + botmem_fight_threshold (25), subordinate to
+bot_memory/bot_learn_enable/bot_learn_use (the gate reads bot_learn_use
+live). No engine change - works on every engine type.
+
 ===========================================================================
 */
 
@@ -133,6 +154,20 @@ static char	botmem_parmval[256];
 static char	botmem_parm[256];
 static int	botmem_parmn = 0;
 static int	botmem_parmboost = 16;
+/* 2026-11-09 (combat-weapon learning, clan issue #2): the pending combat
+   decision per bot (fweapon 0 = no pending) + the per-(bot, weapon 1..9,
+   health band) outcome counters. idx (bot*9 + (weapon-1))*3 + band ->
+   32*9*3 = 864. The grapple (weapon 10) is not a fight weapon and is not
+   tracked. fmin/fthresh cache the botmem_fight_min / botmem_fight_threshold
+   cvar values (set in BotMem_InitGame). */
+static int	botmem_fweapon[32];
+static int	botmem_fband[32];
+static int	botmem_fscore[32];
+static int	botmem_ftime[32];
+static int	botmem_fgood[864];
+static int	botmem_fbad[864];
+static int	botmem_fmin = 3;
+static int	botmem_fthresh = 25;
 
 /*
  Forward declarations (LCC 4.1: no implicit declarations). Only the
@@ -297,6 +332,12 @@ void BotMem_MapStart( void ) {
 	memset( botmem_bb, 0, sizeof( botmem_bb ) );
 	memset( botmem_last, 0, sizeof( botmem_last ) );
 	memset( botmem_applytime, 0, sizeof( botmem_applytime ) );
+	memset( botmem_fweapon, 0, sizeof( botmem_fweapon ) );
+	memset( botmem_fband, 0, sizeof( botmem_fband ) );
+	memset( botmem_fscore, 0, sizeof( botmem_fscore ) );
+	memset( botmem_ftime, 0, sizeof( botmem_ftime ) );
+	memset( botmem_fgood, 0, sizeof( botmem_fgood ) );
+	memset( botmem_fbad, 0, sizeof( botmem_fbad ) );
 	botmem_cnames2n = 0;
 	botmem_nactive = 0;
 	botmem_goalmap_done = 0;	/* goal numbers are per-map (per AAS): re-print */
@@ -406,9 +447,126 @@ void BotMem_LogDecision( bot_state_t *bs, int kind ) {
 
 /*
 =================
+BotMem_FightWeapon
+
+Combat-weapon learning hook (2026-11-09, clan issue #2). Called at the end
+of BotChooseWeapon (ai_dmq3.c) - fires on EVERY call (~10x/s per bot while
+fighting). Records the bot's current combat decision: the weapon it is
+holding (bs->weaponnum), the health band at that moment, the time and the
+score baseline. The baseline must stay fixed while the same weapon is
+still pending: this hook runs ~10x/s, but the per-frame resolution pass in
+BotMem_Frame compares the score against the baseline - a per-call
+overwrite would move the baseline past a freshly landed kill before the
+pass looks, so the kill would never be credited (and the later death
+would count as bad for the weapon). Hence: a call with the same weapon as
+the pending entry returns without touching it; only a weapon change
+replaces the entry (the old one is never resolved - "holding without
+fighting" is not a combat signal). The 60 s expiry counts from the weapon
+selection. Resolved every frame in BotMem_Frame (BotMem_FightCount). No-op when
+botmem is off, the bot is out of the 32-slot table, or the weapon is
+outside 1..9 (gauntlet..BFG; the grapple, 10, is not a fight weapon).
+=================
+*/
+void BotMem_FightWeapon( bot_state_t *bs ) {
+	int botnum, weapon;
+
+	if ( botmem_enabled == 0 ) {
+		return;
+	}
+	botnum = bs->client;
+	if ( botnum < 0 || botnum >= 32 ) {
+		return;
+	}
+	weapon = bs->weaponnum;
+	if ( weapon < 1 || weapon >= 10 ) {
+		return;
+	}
+	if ( botmem_fweapon[botnum] == weapon ) {
+		return;		/* same pending decision, keep its score baseline */
+	}
+	botmem_fweapon[botnum] = weapon;
+	botmem_fband[botnum] = BotMem_HealthBand( botnum );
+	botmem_fscore[botnum] = level.clients[botnum].ps.persistant[PERS_SCORE];
+	botmem_ftime[botnum] = BotMem_LevelTime();
+	BotMem_LogTag( "fdec", botnum, weapon, botmem_fband[botnum], BotMem_LevelTime() );
+}
+
+/*
+=================
+BotMem_FightCount
+
+Records a resolved combat outcome for (bot, weapon, band): isgood 1 = the
+weapon held led to a kill (good), 0 = it led to a death / teamkill (bad).
+Called from the combat pass in BotMem_Frame (every server frame).
+=================
+*/
+static void BotMem_FightCount( int botnum, int weapon, int band, int isgood ) {
+	int idx;
+
+	if ( botnum < 0 || botnum >= 32 ) {
+		return;
+	}
+	if ( weapon < 1 || weapon >= 10 ) {
+		return;
+	}
+	if ( band < 0 || band > 2 ) {
+		band = 0;
+	}
+	idx = (botnum*9 + (weapon-1))*3 + band;
+	if ( isgood != 0 ) {
+		botmem_fgood[idx] = botmem_fgood[idx] + 1;
+	}
+	else {
+		botmem_fbad[idx] = botmem_fbad[idx] + 1;
+	}
+}
+
+/*
+=================
+BotMem_FightGate
+
+Returns 1 = REJECT this weapon for this bot right now, 0 = allow. Called
+from OSP_BotChooseWeaponByRange (ai_dmq3.c) in the table loop and both
+height-override branches. Rejection only: a weapon with a persistently bad
+record (success rate < botmem_fight_threshold % over at least
+botmem_fight_min samples, for the current health band or pooled across
+bands when that band has no data yet) is not chosen. No-op when botmem is
+off, bot_learn_use is off (read live, rcon toggle immediate), the
+bot/weapon is out of range, or there is not enough evidence yet.
+=================
+*/
+int BotMem_FightGate( int botnum, int weapon ) {
+	int band, idx, good, bad, total, s100, b;
+
+	if ( botmem_enabled == 0 ) return 0;
+	if ( botnum < 0 || botnum >= 32 ) return 0;
+	if ( weapon < 1 || weapon >= 10 ) return 0;
+	if ( trap_Cvar_VariableIntegerValue( "bot_learn_use" ) == 0 ) return 0;
+	band = BotMem_HealthBand( botnum );
+	idx = (botnum*9 + (weapon-1))*3 + band;
+	good = botmem_fgood[idx];
+	bad = botmem_fbad[idx];
+	if ( good + bad == 0 ) {
+		/* pooled fallback across bands (this band has no data yet) */
+		good = 0;
+		bad = 0;
+		for ( b = 0; b < 3; b++ ) {
+			good = good + botmem_fgood[(botnum*9 + (weapon-1))*3 + b];
+			bad = bad + botmem_fbad[(botnum*9 + (weapon-1))*3 + b];
+		}
+	}
+	total = good + bad;
+	if ( total < botmem_fmin ) return 0;
+	s100 = good * 100 / total;
+	if ( s100 < botmem_fthresh ) return 1;
+	return 0;
+}
+
+/*
+=================
 BotMem_Frame
 
-1x/s (every server frame; the re-apply is rate-limited to 1x/s per bot):
+Every server frame (the band re-apply is rate-limited to 1x/s per bot):
 resolves the pending decisions - death -> bad, score up (kill credit,
 2026-11-03) -> good, score down while alive (teamkill) -> bad, 60 s
 survival -> good - and re-applies the band-conditional scales.
@@ -500,6 +658,43 @@ void BotMem_Frame( void ) {
 			}
 		}
 	}
+	/* Combat-weapon learning (2026-11-09, clan issue #2): resolve the pending
+	   combat decisions every frame, over the 32 bot slots - independent of the
+	   goal-decision active list, so a stray kill without a pending goal
+	   decision is still credited. score up (kill credit) -> good, score down
+	   while alive (teamkill) -> bad, death -> bad; 60 s without any combat
+	   event -> expire, no count (holding without fighting is not a combat
+	   signal). Runs only when collection is on (the botmem_file guard above).
+	   The gate (BotMem_FightGate) is separate: it reads these counters
+	   directly and works in log-only mode. */
+	for ( b = 0; b < 32; b++ ) {
+		if ( botmem_fweapon[b] == 0 ) {
+			continue;
+		}
+		if ( level.clients[b].ps.pm_type == PM_DEAD ) {
+			BotMem_FightCount( b, botmem_fweapon[b], botmem_fband[b], 0 );
+			BotMem_LogTag( "fbad", b, botmem_fweapon[b], botmem_fband[b], now - botmem_ftime[b] );
+			botmem_fweapon[b] = 0;
+			continue;
+		}
+		sc = level.clients[b].ps.persistant[PERS_SCORE];
+		if ( sc > botmem_fscore[b] ) {
+			BotMem_FightCount( b, botmem_fweapon[b], botmem_fband[b], 1 );
+			BotMem_LogTag( "fgood", b, botmem_fweapon[b], botmem_fband[b], now - botmem_ftime[b] );
+			botmem_fweapon[b] = 0;
+			continue;
+		}
+		if ( sc < botmem_fscore[b] ) {
+			BotMem_FightCount( b, botmem_fweapon[b], botmem_fband[b], 0 );
+			BotMem_LogTag( "fbad", b, botmem_fweapon[b], botmem_fband[b], now - botmem_ftime[b] );
+			botmem_fweapon[b] = 0;
+			continue;
+		}
+		if ( now - botmem_ftime[b] >= 60000 ) {
+			botmem_fweapon[b] = 0;
+			continue;
+		}
+	}
 }
 
 /*
@@ -511,7 +706,7 @@ accumulated per-bot learning to bot_memory/learn_<map>.txt.
 =================
 */
 void BotMem_MapEnd( void ) {
-	int i, g, b;
+	int i, g, b, w, base, fg0, fb0, fg1, fb1, fg2, fb2, fG, fB;
 
 	if ( botmem_file == 0 ) {
 		return;
@@ -526,6 +721,28 @@ void BotMem_MapEnd( void ) {
 	for ( g = 0; g < 256; g++ ) {
 		if ( botmem_good[g] != 0 || botmem_bad[g] != 0 ) {
 			BotMem_LogTag( "stat", g, botmem_good[g], botmem_bad[g], 0 );
+		}
+	}
+	/* Combat-weapon learning summary (2026-11-09, clan issue #2): one console
+	   line per (bot, weapon) with counts - pooled across the health bands
+	   (scale = integer success %) plus the per-band b0/b1/b2 breakdown.
+	   Console only (works in log-only mode); at most 9 lines per bot. */
+	for ( b = 0; b < 32; b++ ) {
+		for ( w = 1; w <= 9; w++ ) {
+			base = (b*9 + (w-1))*3;
+			fg0 = botmem_fgood[base];
+			fb0 = botmem_fbad[base];
+			fg1 = botmem_fgood[base+1];
+			fb1 = botmem_fbad[base+1];
+			fg2 = botmem_fgood[base+2];
+			fb2 = botmem_fbad[base+2];
+			fG = fg0 + fg1 + fg2;
+			fB = fb0 + fb1 + fb2;
+			if ( fG + fB == 0 ) {
+				continue;
+			}
+			G_Printf( "botmem flearn bot=%i w=%i good=%i/%i scale=%i%% b0=%i/%i b1=%i/%i b2=%i/%i\n",
+				b, w, fG, fB, fG*100/(fG+fB), fg0, fb0, fg1, fb1, fg2, fb2 );
 		}
 	}
 	BotMem_LogTag( "end", BotMem_LevelTime(), 0, 0, 0 );
@@ -580,6 +797,7 @@ static void BotMem_LoadLearn( void ) {
 	int handle = 0;
 	int len;
 	int v2;
+	int v3;
 	char hdr[8];
 
 	if ( botmem_enabled == 0 ) return;
@@ -613,7 +831,25 @@ static void BotMem_LoadLearn( void ) {
 		return;
 	}
 	v2 = 0;
-	if ( len >= 90118 ) {
+	v3 = 0;
+	if ( len >= 97030 ) {
+		/* v3 (2026-11-09, clan issue #2): "learn3" (6 B) + pooled + band +
+		   2 x 864 x 4 combat counters = 97030 B. A v3 marker with a shorter
+		   file is corrupt (handled below); a v2 marker in a v3-sized file is
+		   treated as v2 (the trailing bytes are simply not read). */
+		trap_FS_Read( hdr, 1, handle );
+		if ( hdr[0] == '3' ) {
+			v3 = 1;
+		}
+		else if ( hdr[0] == '2' ) {
+			v2 = 1;
+		}
+		else {
+			trap_FS_FCloseFile( handle );
+			return;
+		}
+	}
+	else if ( len >= 90118 ) {
 		trap_FS_Read( hdr, 1, handle );
 		if ( hdr[0] != '2' ) {
 			trap_FS_FCloseFile( handle );
@@ -623,9 +859,13 @@ static void BotMem_LoadLearn( void ) {
 	}
 	trap_FS_Read( botmem_bgood, 32768, handle );
 	trap_FS_Read( botmem_bbad, 32768, handle );
-	if ( v2 != 0 ) {
+	if ( v2 != 0 || v3 != 0 ) {
 		trap_FS_Read( botmem_bg, 12288, handle );
 		trap_FS_Read( botmem_bb, 12288, handle );
+	}
+	if ( v3 != 0 ) {
+		trap_FS_Read( botmem_fgood, 3456, handle );
+		trap_FS_Read( botmem_fbad, 3456, handle );
 	}
 	trap_FS_FCloseFile( handle );
 }
@@ -636,17 +876,20 @@ static void BotMem_SaveLearn( void ) {
 	if ( botmem_enabled == 0 ) return;
 	/* mode FS_WRITE: rewrite the whole file on every save
 	   (FS_APPEND accumulated a block per save in the early build).
-	   v2 (2026-11-03): "learn2" header + pooled + band = 90118 B. */
+	   v3 (2026-11-09, clan issue #2): "learn3" header + pooled + band +
+	   2 x 864 x 4 combat counters = 97030 B (v1/v2 files still load). */
 	BotMem_LearnPath();
 	/* the file handle comes via the pointer; the return value is the file
 	   length for FS_READ and 0 for FS_WRITE (decompiled build: &handle) */
 	trap_FS_FOpenFile( botmem_lmap, &handle, FS_WRITE );
 	if ( handle <= 0 ) return;
-	trap_FS_Write( "learn2", 6, handle );
+	trap_FS_Write( "learn3", 6, handle );
 	trap_FS_Write( botmem_bgood, 32768, handle );
 	trap_FS_Write( botmem_bbad, 32768, handle );
 	trap_FS_Write( botmem_bg, 12288, handle );
 	trap_FS_Write( botmem_bb, 12288, handle );
+	trap_FS_Write( botmem_fgood, 3456, handle );
+	trap_FS_Write( botmem_fbad, 3456, handle );
 	trap_FS_FCloseFile( handle );
 }
 
@@ -1135,6 +1378,20 @@ void BotMem_InitGame( void ) {
 	botmem_parmboost = trap_Cvar_VariableIntegerValue( "botmem_paramount_boost" );
 	if ( botmem_parmboost < 1 ) botmem_parmboost = 1;
 	if ( botmem_parmboost > 16 ) botmem_parmboost = 16;
+	/* botmem_fight_min (2026-11-09, clan issue #2): minimum samples
+	   (good+bad) before a combat weapon can be rejected by the gate;
+	   default 3 (min 1: with 0 the gate would divide by total == 0).
+	   Subordinate to bot_memory. */
+	trap_Cvar_Register( 0, "botmem_fight_min", "3", 0 );
+	botmem_fmin = trap_Cvar_VariableIntegerValue( "botmem_fight_min" );
+	if ( botmem_fmin < 1 ) botmem_fmin = 1;
+	/* botmem_fight_threshold (2026-11-09, clan issue #2): reject a combat
+	   weapon when its success rate (integer %) is below this; default 25.
+	   Subordinate to bot_memory. */
+	trap_Cvar_Register( 0, "botmem_fight_threshold", "25", 0 );
+	botmem_fthresh = trap_Cvar_VariableIntegerValue( "botmem_fight_threshold" );
+	if ( botmem_fthresh < 0 ) botmem_fthresh = 0;
+	if ( botmem_fthresh > 100 ) botmem_fthresh = 100;
 	/* MapStart first: it reads the mapname cvar into botmem_map, which
 	   LoadLearn needs for the per-map learn file name (learn_<map>.txt) and
 	   ParamountLoad for the per-map tactic cvar name */
