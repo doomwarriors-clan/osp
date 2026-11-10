@@ -74,6 +74,20 @@ botmem_fight_min (3) + botmem_fight_threshold (25), subordinate to
 bot_memory/bot_learn_enable/bot_learn_use (the gate reads bot_learn_use
 live). No engine change - works on every engine type.
 
+Warmup / intermission collection gate (2026-11-10, clan issue #4): during
+the OSP warmup (g_doWarmup ready-wait or countdown) and the intermission
+frags neither score nor log, so the PERS_SCORE diff can only see deaths -
+every warmup death would resolve as "bad" (combat: fbad; goal: bad) and no
+"good" can ever be recorded, poisoning the per-map learn counters before
+the real match. So while level.warmupTime != 0 or level.intermissiontime
+!= 0, NO new pending decisions are opened (BotMem_LogDecision /
+BotMem_FightWeapon) and pending ones are dropped WITHOUT counting
+(BotMem_Frame) - the .mem log, the good/bad/kill/tk counters and the
+flearn summary stay clean. The APPLICATION side is intentionally NOT
+gated: BotMem_FightGate, the learned-scale pass (BotMem_BotLearn), the
+paramount boost and the 1x/s band re-apply all keep running, so a bot
+still plays with the knowledge it has.
+
 ===========================================================================
 */
 
@@ -200,6 +214,40 @@ static float BotMem_FbitsF( int i ) {
 /* level.time in ms */
 static int BotMem_LevelTime( void ) {
 	return level.time;
+}
+
+/*
+=================
+BotMem_MatchLive
+
+1 = the match is live, 0 = warmup (countdown, or waiting-for-ready under
+g_doWarmup) or intermission.
+
+Clan issue #4: during the OSP warmup frags neither score nor log, so the
+PERS_SCORE diff that credits kills can only ever go DOWN (deaths) - every
+warmup death resolves as "bad" and no "good" can ever be recorded. The
+counters persist per map in the learn file, so the warmup noise would
+carry into real matches (a weapon can hit botmem_fight_min samples at 0 %
+success and get rejected by the gate before the match even starts). No
+outcome data is credible while the match is not live, so collection is
+gated on this.
+
+The match is live exactly when level.warmupTime == 0: every warmup /
+ready / waiting state sets it to -1 (waiting for players/ready) or to a
+future level.time (countdown), and the in-progress path of the team code
+(G_CheckLiveness) returns early on level.warmupTime == 0. Intermission is
+flagged by level.intermissiontime != 0 (the match has ended, no further
+scoring).
+=================
+*/
+static int BotMem_MatchLive( void ) {
+	if ( level.intermissiontime != 0 ) {
+		return 0;
+	}
+	if ( level.warmupTime != 0 ) {
+		return 0;
+	}
+	return 1;
 }
 
 static int BotMem_Int( char *dst, int v ) {
@@ -375,6 +423,35 @@ static int BotMem_Float2( char *dst, float v ) {
 
 /*
 =================
+BotMem_DropPending
+
+Clears the bot's pending goal decision without counting any outcome
+(clan issue #4: warmup / intermission carry no credible outcome data, so
+a pending decision must not resolve to good / bad / kill / tk - it is
+simply dropped). Mirrors the active-list removal of the BotMem_Frame
+close branches, minus the counting and the .mem tag. botmem_gs / score /
+band / time are left as-is, exactly like the close branches (the band
+re-apply keys off botmem_applied / botmem_gs, not botmem_seen).
+=================
+*/
+static void BotMem_DropPending( int b ) {
+	int j;
+
+	if ( botmem_seen[b] == 0 ) {
+		return;
+	}
+	for ( j = 0; j < botmem_nactive; j++ ) {
+		if ( botmem_active[j] == b ) {
+			botmem_active[j] = botmem_active[botmem_nactive - 1];
+			botmem_nactive = botmem_nactive - 1;
+			break;
+		}
+	}
+	botmem_seen[b] = 0;
+}
+
+/*
+=================
 BotMem_LogDecision
 
 Called at the three goal-choose sites (kind 0 = LTG, 1 = NBG) right
@@ -400,6 +477,14 @@ void BotMem_LogDecision( bot_state_t *bs, int kind ) {
 	}
 	botnum = bs->client;
 	if ( botnum < 0 || botnum >= MAX_CLIENTS ) {
+		return;
+	}
+	/* Warmup / intermission (clan issue #4): no credible outcome data -
+	   drop the previous pending decision without counting and open no new
+	   one (the BotMem_BotLearn application pass that follows the call site
+	   is intentionally NOT gated). */
+	if ( BotMem_MatchLive() == 0 ) {
+		BotMem_DropPending( botnum );
 		return;
 	}
 	/* the chosen goal is the TOP of the bot's goal stack. The old code
@@ -471,6 +556,12 @@ void BotMem_FightWeapon( bot_state_t *bs ) {
 	int botnum, weapon;
 
 	if ( botmem_enabled == 0 ) {
+		return;
+	}
+	/* Warmup / intermission (clan issue #4): no credible combat outcome -
+	   record no pending combat decision. The BotMem_FightGate that reads
+	   the counters is intentionally NOT gated. */
+	if ( BotMem_MatchLive() == 0 ) {
 		return;
 	}
 	botnum = bs->client;
@@ -587,6 +678,22 @@ void BotMem_Frame( void ) {
 		if ( b >= MAX_CLIENTS ) {
 			continue;
 		}
+		if ( BotMem_MatchLive() == 0 ) {
+			/* Warmup / intermission (clan issue #4): no credible outcome
+			   data - drop the pending decision without counting (no good,
+			   no bad, no kill, no tk). The band re-apply runs explicitly
+			   below: only the collection is gated, the application stays
+			   active. Skip the outcome branches. */
+			BotMem_DropPending( b );
+			i = i - 1;
+			if ( b < 32 && trap_Cvar_VariableIntegerValue( "bot_learn_use" ) != 0 && botmem_applied[b] != 0 && now - botmem_applytime[b] >= 1000 ) {
+				botmem_applytime[b] = now;
+				if ( botmem_gs[b] != 0 && trap_BotGoalWeightConfigPtr( botmem_gs[b] ) == botmem_scaled_cfg[b] ) {
+					BotMem_ApplyScales( b, botmem_gs[b] );
+				}
+			}
+			continue;
+		}
 		/* the bot died while the decision was pending (pm_type == PM_DEAD) */
 		if ( level.clients[b].ps.pm_type == PM_DEAD ) {
 			if ( botmem_goal[b] >= 0 && botmem_goal[b] < 256 ) {
@@ -669,6 +776,13 @@ void BotMem_Frame( void ) {
 	   directly and works in log-only mode. */
 	for ( b = 0; b < 32; b++ ) {
 		if ( botmem_fweapon[b] == 0 ) {
+			continue;
+		}
+		if ( BotMem_MatchLive() == 0 ) {
+			/* Warmup / intermission (clan issue #4): no credible combat
+			   outcome - drop the pending combat decision without counting
+			   (no fgood, no fbad). */
+			botmem_fweapon[b] = 0;
 			continue;
 		}
 		if ( level.clients[b].ps.pm_type == PM_DEAD ) {
