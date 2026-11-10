@@ -62,11 +62,12 @@ weapons with a persistently bad record inside the distance table (and both
 height-override branches). Rejection only, no forcing (the table has no
 weight channel). Pending combat decisions are recorded by BotMem_FightWeapon
 (hook at the end of BotChooseWeapon, fired on every call, ~10x/s per bot
-while fighting) and resolved 1x/s in BotMem_Frame: score up (kill) -> good,
-score down while alive (teamkill) -> bad, death -> bad; a weapon change or
-60 s without any combat event -> expire, no count (holding without fighting
-is not a combat signal - deliberate difference to the goal side, where 60 s
-survival counts as good). Counters persist per map in the learn file v3
+while fighting) and resolved every frame in BotMem_Frame: score up (kill)
+-> good, score down while alive (teamkill) -> bad, death -> bad; a weapon
+change or 60 s without any combat event -> expire, no count (holding without
+fighting is not a combat signal - deliberate difference to the goal side,
+where 60 s survival counts as good). Counters persist per map in the learn
+file v3
 ("learn3", 97030 B, v1/v2 load unchanged); .mem tags fdec/fgood/fbad; flearn
 lines at map end (BotMem_MapEnd, works in log-only mode); cvars
 botmem_fight_min (3) + botmem_fight_threshold (25), subordinate to
@@ -452,12 +453,18 @@ Combat-weapon learning hook (2026-11-09, clan issue #2). Called at the end
 of BotChooseWeapon (ai_dmq3.c) - fires on EVERY call (~10x/s per bot while
 fighting). Records the bot's current combat decision: the weapon it is
 holding (bs->weaponnum), the health band at that moment, the time and the
-score baseline. A fresh call overwrites any still-pending entry with a new
-baseline, so a weapon change simply replaces it (the old entry is never
-resolved - "holding without fighting" is not a combat signal). Resolved
-1x/s in BotMem_Frame (BotMem_FightCount). No-op when botmem is off, the bot
-is out of the 32-slot table, or the weapon is outside 1..9 (gauntlet..BFG;
-the grapple, 10, is not a fight weapon).
+score baseline. The baseline must stay fixed while the same weapon is
+still pending: this hook runs ~10x/s, but the per-frame resolution pass in
+BotMem_Frame compares the score against the baseline - a per-call
+overwrite would move the baseline past a freshly landed kill before the
+pass looks, so the kill would never be credited (and the later death
+would count as bad for the weapon). Hence: a call with the same weapon as
+the pending entry returns without touching it; only a weapon change
+replaces the entry (the old one is never resolved - "holding without
+fighting" is not a combat signal). The 60 s expiry counts from the weapon
+selection. Resolved every frame in BotMem_Frame (BotMem_FightCount). No-op when
+botmem is off, the bot is out of the 32-slot table, or the weapon is
+outside 1..9 (gauntlet..BFG; the grapple, 10, is not a fight weapon).
 =================
 */
 void BotMem_FightWeapon( bot_state_t *bs ) {
@@ -474,6 +481,9 @@ void BotMem_FightWeapon( bot_state_t *bs ) {
 	if ( weapon < 1 || weapon >= 10 ) {
 		return;
 	}
+	if ( botmem_fweapon[botnum] == weapon ) {
+		return;		/* same pending decision, keep its score baseline */
+	}
 	botmem_fweapon[botnum] = weapon;
 	botmem_fband[botnum] = BotMem_HealthBand( botnum );
 	botmem_fscore[botnum] = level.clients[botnum].ps.persistant[PERS_SCORE];
@@ -487,7 +497,7 @@ BotMem_FightCount
 
 Records a resolved combat outcome for (bot, weapon, band): isgood 1 = the
 weapon held led to a kill (good), 0 = it led to a death / teamkill (bad).
-Called from the combat 1x/s pass in BotMem_Frame.
+Called from the combat pass in BotMem_Frame (every server frame).
 =================
 */
 static void BotMem_FightCount( int botnum, int weapon, int band, int isgood ) {
@@ -556,7 +566,7 @@ int BotMem_FightGate( int botnum, int weapon ) {
 =================
 BotMem_Frame
 
-1x/s (every server frame; the re-apply is rate-limited to 1x/s per bot):
+Every server frame (the band re-apply is rate-limited to 1x/s per bot):
 resolves the pending decisions - death -> bad, score up (kill credit,
 2026-11-03) -> good, score down while alive (teamkill) -> bad, 60 s
 survival -> good - and re-applies the band-conditional scales.
@@ -649,7 +659,7 @@ void BotMem_Frame( void ) {
 		}
 	}
 	/* Combat-weapon learning (2026-11-09, clan issue #2): resolve the pending
-	   combat decisions 1x/s, over the 32 bot slots - independent of the
+	   combat decisions every frame, over the 32 bot slots - independent of the
 	   goal-decision active list, so a stray kill without a pending goal
 	   decision is still credited. score up (kill credit) -> good, score down
 	   while alive (teamkill) -> bad, death -> bad; 60 s without any combat
