@@ -15,13 +15,17 @@ Line format:
 Controlled by cvar bot_memory (1 = on, 0 = off; DEFAULT 0 = off,
 2026-11-02 - live servers opt in with +set bot_memory 1).
 
-Per-map learning: good/bad counters are stored per map in
-bot_memory/learn_<map>.txt (same 65541 B layout as the old global
-learn.txt) - each map is loaded at map start, saved at map end.
-v2 (2026-11-03): "learn2" (6 B) + 2 x 8192 x 4 pooled +
-2 x 3072 x 4 per-(bot,classname,health band) = 90118 B.
-v1 ("learn" 5 B header, 65541 B, pooled only) is still accepted
-(band section stays zero) - the seed tools write v1.
+Per-map learning: good/bad counters are stored per (map, bot) in
+bot_memory/learn_<map>_<botfile>.txt (v4, 2026-11-12 - see the dwc.4
+paragraph below) - each (map,bot) file is loaded when that bot connects
+to that map, saved at map end (and on the bot's disconnect).
+History: v1 ("learn" 5 B header, 65541 B, pooled only) and v2
+("learn2" 6 B + 2 x 8192 x 4 pooled + 2 x 3072 x 4 per-(bot,classname,
+health band) = 90118 B) and v3 ("learn3", 97030 B, + the combat
+counters) were the one-FILE-per-map pooled formats; the seed tools
+wrote v1. The dwc.3 -> dwc.4 cutover is the planned learn reset (the v3
+data is slot-drift-contaminated, clan issue #6), so v1/v2/v3 files are
+no longer read.
 
 Paramount map tactics: cvar botmem_paramount_<map> (space-separated
 goal classnames) lists goals the bot must always pursue - they get a
@@ -45,6 +49,58 @@ log-only mode (the .mem decision log + the pooled outcome counting keep
 working, the engine side of BotMem_BotLearn is skipped, one warning per
 VM restart). One QVM is therefore safe on both engine types.
 
+Per-(map,bot) learn files + issue-#6 fixes + built-in weapon rule
+(2026-11-12, dwc.4, clan issue #6 follow-up): the pooled one-file-per-
+map format (v1/v2/v3) keyed the counters by clientnum only - and
+production adds the bots by manual rcon, so the clientnum<->bot
+mapping drifts (a bot learns into a slot the NEXT bot reads: the
+issue-#6 mechanism). dwc.4 fixes this by construction:
+ - One file per (map, botfile): bot_memory/learn_<map>_<botfile>.txt,
+   v4 = "learn4" (6 B) + ONE bot's counters: bgood/bbad 2 x 256 (per
+   goal) + bg/bb 2 x 96 (per classname x 3 bands) + fgood/fbad 2 x 27
+   (per weapon 1..9 x 3 bands) = 3038 B. The file key is the botfile
+   name (the bots.txt aifile base name, e.g. "dwcbot1"), derived in
+   BotMem_BotConnect from the client's "characterfile" userinfo key
+   (set by G_AddBot) - NOT the color-coded display name. The
+   in-memory counters stay slot (clientnum) indexed - unchanged; only
+   the file I/O is name-keyed.
+ - Registration: the engine re-runs ClientConnect (firstTime=qfalse)
+   for existing clients on every map rotation, so G_BotConnect fires
+   for BOTH fresh adds and post-map-change reconnects; it calls
+   BotMem_BotConnect, which stores the name and loads the bot's file
+   (the game VM restarts per map, BSS zeroes, so name + load are
+   redone per map). ClientDisconnect calls BotMem_BotDisconnect,
+   which persists the file mid-map (a kicked bot does not lose its
+   learning) and clears the slot.
+ - Same botfile on both teams (production does this): the FIRST slot
+   is the BASE (loads the file), a LATER same-name slot is a DELTA
+   (slot stays zero). At save time the deltas are summed into the
+   base (BotMem_SaveAllBots at map end) or, for a mid-map delta save,
+   the file is folded into the delta slot first (BotMem_FlushSlot) -
+   the (map,bot) file always carries base + all deltas exactly once.
+ - Map end (BotMem_MapEnd): all six counter arrays DECAY first
+   (botmem_decay, default 1: c<16 -> (c+1)/2, else c - c/16) so old
+   bad luck cannot freeze a weapon permanently (the 0/3 lockout),
+   then the per-bot files are saved.
+ - Gauntlet (weapon 1) is no longer a tracked/gated fight weapon
+   (BotMem_FightWeapon / BotMem_FightGate start at weapon 2): it is
+   never a choice, so its counters could only collect noise.
+ - Fight gate good-count floor (botmem_fight_goodmin, default 3): a
+   weapon is rejected only with at least this many GOOD samples
+   (below: unproven, never bad).
+ - Built-in weapon pickup rule (botmem_weapon_rule, default 1): every
+   weapon pickup goal (AAS item weapon_*, except weapon_machinegun /
+   weapon_gauntlet) gets the fixed botmem_parmboost INSTEAD of the
+   learned scale (every weapon is an upgrade over the MG - the
+   learned scale was dragged to ~0 by death misattribution), and a
+   death after such a pickup is exempt from the bad count (.mem tag
+   "wskip" - the death is the location's fault, not the weapon's;
+   the kill / teamkill branches are NOT exempt). The fixed-boost pass
+   in BotMem_BotLearn now iterates the MAP's classname table, so the
+   phantom P lines (cvar list entries absent from the map) are gone.
+   The per-map botmem_paramount_<map> cvar lists still work as an
+   override (NeedsFixedBoost = paramount OR weapon rule).
+
 Ported to the real OSP 1.03a source tree (2026-11-05): the raw
 decompiled client offsets are replaced by typed accesses (layout
 verified identical by a 32-bit compile against the tree headers:
@@ -67,8 +123,9 @@ while fighting) and resolved every frame in BotMem_Frame: score up (kill)
 change or 60 s without any combat event -> expire, no count (holding without
 fighting is not a combat signal - deliberate difference to the goal side,
 where 60 s survival counts as good). Counters persist per map in the learn
-file v3
-("learn3", 97030 B, v1/v2 load unchanged); .mem tags fdec/fgood/fbad; flearn
+file (dwc.4: the v4 per-(map,bot) files, 3038 B each - see the dwc.4
+paragraph above; dwc.3: the pooled v3 "learn3", 97030 B); .mem tags
+fdec/fgood/fbad; flearn
 lines at map end (BotMem_MapEnd, works in log-only mode); cvars
 botmem_fight_min (3) + botmem_fight_threshold (25), subordinate to
 bot_memory/bot_learn_enable/bot_learn_use (the gate reads bot_learn_use
@@ -132,7 +189,6 @@ static int	botmem_good[256];
 static int	botmem_bad[256];
 static int	botmem_bgood[8192];
 static int	botmem_bbad[8192];
-static int	botmem_loaded = 0;
 static int	botmem_boost = 0;
 static int	botmem_goalmap_done = 0;
 static char	botmem_lmap[128];
@@ -182,12 +238,68 @@ static int	botmem_fgood[864];
 static int	botmem_fbad[864];
 static int	botmem_fmin = 3;
 static int	botmem_fthresh = 25;
+/* 2026-11-12 (dwc.4, per-bot learn files, clan issue #6 follow-up):
+   slot -> botfile name table (the key = the bot's aifile base name:
+   dwcbot1, dyg, awvp, ... - parsed from the client's "characterfile"
+   userinfo key in BotMem_BotConnect). The in-memory counters stay
+   slot (clientnum) indexed - unchanged; only the file I/O is keyed by
+   name (learn_<map>_<botfile>.txt). Filled at bot connect (fresh adds
+   AND the firstTime=qfalse reconnect after every map change), cleared
+   per map (BotMem_MapStart) and on disconnect (BotMem_BotDisconnect). */
+static char	botmem_botfile[32][32];
+/* 2026-11-12 (dwc.4, issue #6): fight-gate good-count floor - a weapon
+   can only be rejected once it has at least this many GOOD samples
+   (below that the weapon is "unproven", not "bad": rejecting it would
+   starve the counters of the very evidence that could clear them - the
+   0/3 permanent lockout of issue #6). Cached from botmem_fight_goodmin
+   in BotMem_InitGame. */
+static int	botmem_fgoodmin = 3;
+/* 2026-11-12 (dwc.4, issue #6): botmem_decay master (default 1) - at
+   every map end, before the per-bot save, all counter cells decay
+   (small counts halve, large counts -6.25%), so old bad luck cannot
+   freeze a weapon permanently (see BotMem_DecayInt). 0 = off. */
+static int	botmem_decay = 1;
+/* 2026-11-12 (dwc.4, weapon pickup rule): botmem_weapon_rule master
+   (default 1) - built-in: every weapon pickup goal except
+   weapon_gauntlet / weapon_machinegun gets the fixed paramount boost
+   instead of the learned scale, and a death after a weapon pickup
+   decision is exempt from the bad count (the death is the location's
+   fault, not the weapon's). 0 = the dwc.3 behavior. The boost value is
+   botmem_parmboost (the same 16x as the cvar paramount lists). */
+static int	botmem_weapon_rule = 1;
+/* 2026-11-12 (dwc.4, per-bot learn files): per-slot "this slot LOADED its
+   file" flag (the BASE slot). The first slot of a botfile name loads the
+   (map,bot) file into its counters; a LATER slot with the same name (the
+   same botfile on both teams - production does this) is a DELTA slot and
+   does NOT load the file, because summing two loaded copies at map end
+   would double-count the file's base. At save time the delta slots are
+   summed into the base slot (BotMem_SaveAllBots) or, when they save first
+   (mid-map disconnect), the file is folded into them (BotMem_FlushSlot).
+   Zeroed per map (BotMem_MapStart) and on flush. */
+static int	botmem_loadflag[32];
+/* 2026-11-12 (dwc.4, per-bot learn files): 3032 B scratch (= 758 int32),
+   the payload of one v4 (map,bot) file in file order:
+   bgood 256 + bbad 256 + bg 96 + bb 96 + fgood 27 + fbad 27. Single-use
+   buffer for load (read + add into a slot) and save (pack + write). */
+static int	botmem_scratch[758];
 
 /*
  Forward declarations (LCC 4.1: no implicit declarations). Only the
  functions used before their definition need them here.
 */
-static void BotMem_SaveLearn( void );
+static void BotMem_SaveLearnBot( int botnum );
+static void BotMem_LearnBotPath( int botnum, char *dst );
+static void BotMem_LoadLearnBot( int botnum );
+static void BotMem_SaveAllBots( void );
+static void BotMem_AddScratch( int botnum, int *s );
+static void BotMem_ClearSlot( int botnum );
+static int	 BotMem_SameName( int a, int b );
+static void BotMem_FlushSlot( int botnum );
+static void BotMem_DecayCounters( void );
+static int	 BotMem_DecayInt( int c );
+static int	 BotMem_IsWeaponPickup( char *name );
+static int	 BotMem_NeedsFixedBoost( char *name );
+static int	 BotMem_IsWeaponGoal( int botnum );
 static void BotMem_BotGoalCount( int botnum, int goal, int isgood );
 static void BotMem_BotGoalCountB( int botnum, int goal, int band, int isgood );
 static int	 BotMem_HealthBand( int botnum );
@@ -386,6 +498,11 @@ void BotMem_MapStart( void ) {
 	memset( botmem_ftime, 0, sizeof( botmem_ftime ) );
 	memset( botmem_fgood, 0, sizeof( botmem_fgood ) );
 	memset( botmem_fbad, 0, sizeof( botmem_fbad ) );
+	/* 2026-11-12 (dwc.4): the per-bot name table + base-slot flags are
+	   per-map (the VM restarts per map; the reconnect-driven
+	   BotMem_BotConnect re-registers every bot after the change) */
+	memset( botmem_botfile, 0, sizeof( botmem_botfile ) );
+	memset( botmem_loadflag, 0, sizeof( botmem_loadflag ) );
 	botmem_cnames2n = 0;
 	botmem_nactive = 0;
 	botmem_goalmap_done = 0;	/* goal numbers are per-map (per AAS): re-print */
@@ -569,7 +686,11 @@ void BotMem_FightWeapon( bot_state_t *bs ) {
 		return;
 	}
 	weapon = bs->weaponnum;
-	if ( weapon < 1 || weapon >= 10 ) {
+	/* 2026-11-12 (dwc.4, issue #6): the gauntlet (weapon 1) is NOT a
+	   tracked fight weapon - it is never a choice, so its counters can
+	   only collect noise (and the 0/3 lockout of issue #6 lived exactly
+	   in such a low-sample weapon). Tracked: weapons 2..9. */
+	if ( weapon < 2 || weapon >= 10 ) {
 		return;
 	}
 	if ( botmem_fweapon[botnum] == weapon ) {
@@ -631,7 +752,10 @@ int BotMem_FightGate( int botnum, int weapon ) {
 
 	if ( botmem_enabled == 0 ) return 0;
 	if ( botnum < 0 || botnum >= 32 ) return 0;
-	if ( weapon < 1 || weapon >= 10 ) return 0;
+	/* 2026-11-12 (dwc.4, issue #6): the gauntlet (weapon 1) is never
+	   gated - it is not tracked at all (BotMem_FightWeapon), so gating
+	   it would reject the base weapon on stale noise. */
+	if ( weapon < 2 || weapon >= 10 ) return 0;
 	if ( trap_Cvar_VariableIntegerValue( "bot_learn_use" ) == 0 ) return 0;
 	band = BotMem_HealthBand( botnum );
 	idx = (botnum*9 + (weapon-1))*3 + band;
@@ -648,6 +772,13 @@ int BotMem_FightGate( int botnum, int weapon ) {
 	}
 	total = good + bad;
 	if ( total < botmem_fmin ) return 0;
+	/* 2026-11-12 (dwc.4, issue #6): good-count floor - a weapon with
+	   fewer than botmem_fgoodmin GOOD samples is "unproven", not "bad":
+	   rejecting it would starve the counters of the very evidence that
+	   could clear them (the 0/3 permanent lockout). With the floor at 3
+	   and fmin at 3, a weapon needs at least 3 good samples before it
+	   can be rejected at all. */
+	if ( good < botmem_fgoodmin ) return 0;
 	s100 = good * 100 / total;
 	if ( s100 < botmem_fthresh ) return 1;
 	return 0;
@@ -696,6 +827,22 @@ void BotMem_Frame( void ) {
 		}
 		/* the bot died while the decision was pending (pm_type == PM_DEAD) */
 		if ( level.clients[b].ps.pm_type == PM_DEAD ) {
+			/* 2026-11-12 (dwc.4, weapon pickup rule): a death after a
+			   weapon-pickup decision is the LOCATION's fault, not the
+			   weapon's (the bot died while walking to / fighting after
+			   the pickup) - exempt from the bad count: new .mem tag
+			   "wskip", no counters (the parsers ignore unknown tags).
+			   The kill / teamkill / survival branches are NOT exempt:
+			   a kill after a pickup is real good evidence, a teamkill
+			   is the bot's fault. */
+			if ( botmem_weapon_rule != 0 && BotMem_IsWeaponGoal( b ) != 0 ) {
+				BotMem_LogTag( "wskip", b, botmem_goal[b], botmem_kind[b], now - botmem_time[b] );
+				botmem_active[i] = botmem_active[botmem_nactive - 1];
+				botmem_nactive = botmem_nactive - 1;
+				botmem_seen[b] = 0;
+				i = i - 1;
+				continue;
+			}
 			if ( botmem_goal[b] >= 0 && botmem_goal[b] < 256 ) {
 				botmem_bad[botmem_goal[b]] = botmem_bad[botmem_goal[b]] + 1;
 				BotMem_BotGoalCountB( b, botmem_goal[b], botmem_band[b], 0 );
@@ -862,8 +1009,19 @@ void BotMem_MapEnd( void ) {
 	BotMem_LogTag( "end", BotMem_LevelTime(), 0, 0, 0 );
 	trap_FS_FCloseFile( botmem_file );
 	botmem_file = 0;
-	/* persist the accumulated per-bot learning */
-	BotMem_SaveLearn();
+	/* 2026-11-12 (dwc.4): persist the accumulated per-bot learning to
+	   bot_memory/learn_<map>_<botfile>.txt (one file per named slot,
+	   colliding slots of the same botfile summed into one). At every map
+	   end, BEFORE the save, all counters decay (botmem_decay, default on)
+	   so old bad luck cannot freeze a weapon permanently (issue #6). The
+	   bot_learn_enable re-check is redundant with the botmem_file guard
+	   above (file open == collection on) but keeps the save self-contained. */
+	if ( trap_Cvar_VariableIntegerValue( "bot_learn_enable" ) != 0 ) {
+		if ( botmem_decay != 0 ) {
+			BotMem_DecayCounters();
+		}
+		BotMem_SaveAllBots();
+	}
 }
 
 /* ================= OSP 1.04b botmem learning loop ================= */
@@ -886,20 +1044,26 @@ static int BotMem_StrCmp( char *a, char *b ) {
 	return 0;
 }
 
-/* "bot_memory/learn_<map>.txt"; the map name (botmem_map, filled by
-   BotMem_MapStart from the engine's mapname cvar) is sanitized to
-   [a-zA-Z0-9], max 31 chars, so odd map names cannot break the path. */
-static void BotMem_LearnPath( void ) {
+/* 2026-11-12 (dwc.4): per-(map,bot) learn file
+   "bot_memory/learn_<map>_<botfile>.txt" (was: one pooled
+   learn_<map>.txt). The map name (botmem_map, filled by
+   BotMem_MapStart from the engine's mapname cvar) and the botfile name
+   (botmem_botfile, normalized to [a-zA-Z0-9]) are sanitized, max 31
+   chars each, so odd names cannot break the path. dst is the path
+   buffer (botmem_lmap), passed for clarity. */
+static void BotMem_LearnBotPath( int botnum, char *dst ) {
 	int i, n, c;
 	char *p;
 
-	p = botmem_lmap;
+	p = dst;
 	memcpy( p, "bot_memory/learn_", 17 );
 	n = 17;
 	for ( i = 0; i < 31 && botmem_map[i] != 0; i++ ) {
 		c = botmem_map[i];
 		if ( (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ) p[n] = c, n = n + 1;
 	}
+	p[n] = '_'; n = n + 1;
+	for ( i = 0; i < 31 && botnum >= 0 && botnum < 32 && botmem_botfile[botnum][i] != 0; i++ ) p[n] = botmem_botfile[botnum][i], n = n + 1;
 	p[n] = '.'; n = n + 1;
 	p[n] = 't'; n = n + 1;
 	p[n] = 'x'; n = n + 1;
@@ -907,104 +1071,370 @@ static void BotMem_LearnPath( void ) {
 	p[n] = 0;
 }
 
-static void BotMem_LoadLearn( void ) {
+/* 2026-11-12 (dwc.4): add the v4 payload (scratch, file order) into one
+   slot's counter segments. The slot holds its own counters; the scratch
+   is the file's (or another slot's) share of the same (map,bot) data. */
+static void BotMem_AddScratch( int b, int *s ) {
+	int i;
+
+	if ( b < 0 || b >= 32 ) return;
+	for ( i = 0; i < 256; i++ ) {
+		botmem_bgood[b*256+i] = botmem_bgood[b*256+i] + s[i];
+		botmem_bbad[b*256+i] = botmem_bbad[b*256+i] + s[256+i];
+	}
+	for ( i = 0; i < 96; i++ ) {
+		botmem_bg[b*96+i] = botmem_bg[b*96+i] + s[512+i];
+		botmem_bb[b*96+i] = botmem_bb[b*96+i] + s[608+i];
+	}
+	for ( i = 0; i < 27; i++ ) {
+		botmem_fgood[b*27+i] = botmem_fgood[b*27+i] + s[704+i];
+		botmem_fbad[b*27+i] = botmem_fbad[b*27+i] + s[731+i];
+	}
+}
+
+/* 2026-11-12 (dwc.4): zero one slot's six counter segments (slot reuse:
+   a freed client slot must not carry its previous occupant's counters
+   into the next bot's file load). */
+static void BotMem_ClearSlot( int b ) {
+	if ( b < 0 || b >= 32 ) return;
+	memset( &botmem_bgood[b*256], 0, 256 * 4 );
+	memset( &botmem_bbad[b*256], 0, 256 * 4 );
+	memset( &botmem_bg[b*96], 0, 96 * 4 );
+	memset( &botmem_bb[b*96], 0, 96 * 4 );
+	memset( &botmem_fgood[b*27], 0, 27 * 4 );
+	memset( &botmem_fbad[b*27], 0, 27 * 4 );
+}
+
+/* 2026-11-12 (dwc.4): case-insensitive compare of two normalized botfile
+   names (both [a-zA-Z0-9], 32 B). */
+static int BotMem_SameName( int a, int b ) {
+	int i, ca, cb;
+
+	if ( a < 0 || a >= 32 || b < 0 || b >= 32 ) return 0;
+	for ( i = 0; i < 31; i++ ) {
+		ca = botmem_botfile[a][i];
+		cb = botmem_botfile[b][i];
+		if ( ca >= 'A' && ca <= 'Z' ) ca = ca + 32;
+		if ( cb >= 'A' && cb <= 'Z' ) cb = cb + 32;
+		if ( ca != cb ) return 0;
+		if ( ca == 0 ) return 1;
+	}
+	return 1;
+}
+
+/* 2026-11-12 (dwc.4): load ONE bot's v4 counters into its slot.
+   v4: "learn4" (6 B) + bgood/bbad 2 x 256 int32 + bg/bb 2 x 96 int32 +
+   fgood/fbad 2 x 27 int32 = 3038 B. Called from BotMem_BotConnect for
+   BASE slots only (delta slots of the same botfile keep their slot
+   zeroed - see the botmem_loadflag comment). FS_READ: never creates or
+   truncates the file. Old v1/v2/v3 pooled files are NOT read (the
+   dwc.3 -> dwc.4 cutover is the planned learn reset; the v3 data is
+   slot-drift-contaminated, clan issue #6). */
+static void BotMem_LoadLearnBot( int botnum ) {
 	int handle = 0;
 	int len;
-	int v2;
-	int v3;
 	char hdr[8];
 
 	if ( botmem_enabled == 0 ) return;
-	if ( botmem_loaded != 0 ) return;
-	/* 2026-11-04: nothing to load when BOTH collection and use are off
-	   (skip the pointless ~90 KB read). The loaded flag stays 0, so a cvar
-	   toggle before the next G_Init still gets loaded then. */
+	if ( botnum < 0 || botnum >= 32 ) return;
+	if ( botmem_botfile[botnum][0] == 0 ) return;
+	/* nothing to load when BOTH collection and use are off (skip the
+	   pointless read); a cvar toggle before the next map still loads
+	   then, because the per-bot load runs on every bot connect. */
 	if ( trap_Cvar_VariableIntegerValue( "bot_learn_enable" ) == 0 &&
 	     trap_Cvar_VariableIntegerValue( "bot_learn_use" ) == 0 ) {
 		return;
 	}
-	botmem_loaded = 1;
-	/* mode FS_READ: never create/truncate the file on load.
-	   (FS_WRITE truncated learn.txt on every G_Init in the early build.)
-	   v2 (2026-11-03): "learn2" (6 B) + 2 x 8192 x 4 pooled +
-	   2 x 3072 x 4 per-(bot,classname,band) = 90118 B.
-	   v1 ("learn" 5 B header, 65541 B, pooled only) is still accepted
-	   (band section stays zero) - the seed tools write v1. */
-	BotMem_LearnPath();
+	BotMem_LearnBotPath( botnum, botmem_lmap );
 	len = trap_FS_FOpenFile( botmem_lmap, &handle, FS_READ );
-	if ( handle <= 0 || len < 65541 ) {
+	if ( handle <= 0 || len < 3038 ) {
 		if ( handle > 0 ) trap_FS_FCloseFile( handle );
 		return;
 	}
-	/* len (from FOpenFile, FS_READ) guarantees the file is at least v1-sized, so
-	   the reads below are in bounds; trap_FS_Read is void in the game header
-	   (the decompiled build checked its return - redundant given the len check) */
-	trap_FS_Read( hdr, 5, handle );
-	if ( !(hdr[0] == 'l' && hdr[1] == 'e' && hdr[2] == 'a' && hdr[3] == 'r' && hdr[4] == 'n') ) {
+	/* len (from FOpenFile, FS_READ) guarantees the file is at least
+	   v4-sized, so the reads below are in bounds */
+	trap_FS_Read( hdr, 6, handle );
+	if ( !(hdr[0] == 'l' && hdr[1] == 'e' && hdr[2] == 'a' && hdr[3] == 'r' && hdr[4] == 'n' && hdr[5] == '4') ) {
 		trap_FS_FCloseFile( handle );
 		return;
 	}
-	v2 = 0;
-	v3 = 0;
-	if ( len >= 97030 ) {
-		/* v3 (2026-11-09, clan issue #2): "learn3" (6 B) + pooled + band +
-		   2 x 864 x 4 combat counters = 97030 B. A v3 marker with a shorter
-		   file is corrupt (handled below); a v2 marker in a v3-sized file is
-		   treated as v2 (the trailing bytes are simply not read). */
-		trap_FS_Read( hdr, 1, handle );
-		if ( hdr[0] == '3' ) {
-			v3 = 1;
-		}
-		else if ( hdr[0] == '2' ) {
-			v2 = 1;
-		}
-		else {
-			trap_FS_FCloseFile( handle );
-			return;
-		}
-	}
-	else if ( len >= 90118 ) {
-		trap_FS_Read( hdr, 1, handle );
-		if ( hdr[0] != '2' ) {
-			trap_FS_FCloseFile( handle );
-			return;
-		}
-		v2 = 1;
-	}
-	trap_FS_Read( botmem_bgood, 32768, handle );
-	trap_FS_Read( botmem_bbad, 32768, handle );
-	if ( v2 != 0 || v3 != 0 ) {
-		trap_FS_Read( botmem_bg, 12288, handle );
-		trap_FS_Read( botmem_bb, 12288, handle );
-	}
-	if ( v3 != 0 ) {
-		trap_FS_Read( botmem_fgood, 3456, handle );
-		trap_FS_Read( botmem_fbad, 3456, handle );
-	}
+	trap_FS_Read( botmem_scratch, 3032, handle );
+	BotMem_AddScratch( botnum, botmem_scratch );
 	trap_FS_FCloseFile( handle );
 }
 
-static void BotMem_SaveLearn( void ) {
+/* 2026-11-12 (dwc.4): save ONE bot's v4 counters to its
+   (map,bot) file (whole-file rewrite, like the old save). Gate:
+   bot_memory + bot_learn_enable (a collection-off map keeps no
+   file at all - consistent with the .mem file open in MapStart). */
+static void BotMem_SaveLearnBot( int botnum ) {
 	int handle = 0;
+	int i;
 
 	if ( botmem_enabled == 0 ) return;
-	/* mode FS_WRITE: rewrite the whole file on every save
-	   (FS_APPEND accumulated a block per save in the early build).
-	   v3 (2026-11-09, clan issue #2): "learn3" header + pooled + band +
-	   2 x 864 x 4 combat counters = 97030 B (v1/v2 files still load). */
-	BotMem_LearnPath();
+	if ( botnum < 0 || botnum >= 32 ) return;
+	if ( botmem_botfile[botnum][0] == 0 ) return;
+	if ( trap_Cvar_VariableIntegerValue( "bot_learn_enable" ) == 0 ) return;
+	/* pack the slot's six segments into the scratch in file order */
+	for ( i = 0; i < 256; i++ ) {
+		botmem_scratch[i] = botmem_bgood[botnum*256+i];
+		botmem_scratch[256+i] = botmem_bbad[botnum*256+i];
+	}
+	for ( i = 0; i < 96; i++ ) {
+		botmem_scratch[512+i] = botmem_bg[botnum*96+i];
+		botmem_scratch[608+i] = botmem_bb[botnum*96+i];
+	}
+	for ( i = 0; i < 27; i++ ) {
+		botmem_scratch[704+i] = botmem_fgood[botnum*27+i];
+		botmem_scratch[731+i] = botmem_fbad[botnum*27+i];
+	}
+	BotMem_LearnBotPath( botnum, botmem_lmap );
 	/* the file handle comes via the pointer; the return value is the file
 	   length for FS_READ and 0 for FS_WRITE (decompiled build: &handle) */
 	trap_FS_FOpenFile( botmem_lmap, &handle, FS_WRITE );
 	if ( handle <= 0 ) return;
-	trap_FS_Write( "learn3", 6, handle );
-	trap_FS_Write( botmem_bgood, 32768, handle );
-	trap_FS_Write( botmem_bbad, 32768, handle );
-	trap_FS_Write( botmem_bg, 12288, handle );
-	trap_FS_Write( botmem_bb, 12288, handle );
-	trap_FS_Write( botmem_fgood, 3456, handle );
-	trap_FS_Write( botmem_fbad, 3456, handle );
+	trap_FS_Write( "learn4", 6, handle );
+	trap_FS_Write( botmem_scratch, 3032, handle );
 	trap_FS_FCloseFile( handle );
+}
+
+/* 2026-11-12 (dwc.4): persist one slot's (map,bot) file in FULL: if the
+   slot is a DELTA slot (never loaded the file itself - a sibling instance
+   holds the base, or its base disconnected earlier), fold the file into
+   the slot first, so the plain overwrite save below carries the complete
+   state (file share + this slot's delta) without double counting. Then
+   save, and clear the slot (counters + name + flag) so a slot reuse or a
+   double save (map end, then the engine's disconnect) is a no-op. */
+static void BotMem_FlushSlot( int b ) {
+	int handle = 0;
+	int len;
+	char hdr[8];
+
+	if ( b < 0 || b >= 32 ) return;
+	if ( botmem_botfile[b][0] == 0 ) return;
+	if ( botmem_loadflag[b] == 0 ) {
+		BotMem_LearnBotPath( b, botmem_lmap );
+		len = trap_FS_FOpenFile( botmem_lmap, &handle, FS_READ );
+		if ( handle > 0 && len >= 3038 ) {
+			trap_FS_Read( hdr, 6, handle );
+			if ( hdr[0] == 'l' && hdr[1] == 'e' && hdr[2] == 'a' && hdr[3] == 'r' && hdr[4] == 'n' && hdr[5] == '4' ) {
+				trap_FS_Read( botmem_scratch, 3032, handle );
+				BotMem_AddScratch( b, botmem_scratch );
+			}
+			trap_FS_FCloseFile( handle );
+			handle = 0;
+		}
+	}
+	BotMem_SaveLearnBot( b );
+	BotMem_ClearSlot( b );
+	memset( botmem_botfile[b], 0, 32 );
+	botmem_loadflag[b] = 0;
+}
+
+/* 2026-11-12 (dwc.4): map-end persistence - one file per (map,bot) name.
+   Colliding slots (the same botfile on both teams) share ONE file: the
+   delta slots are summed into the base slot (a delta slot holds only its
+   own delta, never the file base, so the sum is exact), then the base is
+   flushed. With no base left (it disconnected earlier), the first named
+   slot becomes the target and folds the file in (FlushSlot). */
+static void BotMem_SaveAllBots( void ) {
+	int i, j, t;
+
+	if ( botmem_enabled == 0 ) return;
+	for ( i = 0; i < 32; i++ ) {
+		if ( botmem_botfile[i][0] == 0 ) continue;
+		t = -1;
+		for ( j = 0; j < 32; j++ ) {
+			if ( j == i ) continue;
+			if ( botmem_botfile[j][0] == 0 ) continue;
+			if ( botmem_loadflag[j] == 0 ) continue;
+			if ( BotMem_SameName( i, j ) ) { t = j; break; }
+		}
+		if ( t < 0 ) continue;		/* i IS the target (base or sole slot) */
+		for ( j = 0; j < 256; j++ ) {
+			botmem_bgood[t*256+j] = botmem_bgood[t*256+j] + botmem_bgood[i*256+j];
+			botmem_bbad[t*256+j] = botmem_bbad[t*256+j] + botmem_bbad[i*256+j];
+		}
+		for ( j = 0; j < 96; j++ ) {
+			botmem_bg[t*96+j] = botmem_bg[t*96+j] + botmem_bg[i*96+j];
+			botmem_bb[t*96+j] = botmem_bb[t*96+j] + botmem_bb[i*96+j];
+		}
+		for ( j = 0; j < 27; j++ ) {
+			botmem_fgood[t*27+j] = botmem_fgood[t*27+j] + botmem_fgood[i*27+j];
+			botmem_fbad[t*27+j] = botmem_fbad[t*27+j] + botmem_fbad[i*27+j];
+		}
+		BotMem_ClearSlot( i );
+		memset( botmem_botfile[i], 0, 32 );
+		botmem_loadflag[i] = 0;
+	}
+	for ( i = 0; i < 32; i++ ) {
+		if ( botmem_botfile[i][0] != 0 ) {
+			BotMem_FlushSlot( i );
+		}
+	}
+}
+
+/* 2026-11-12 (dwc.4, issue #6): one decay step for a counter cell -
+   small counts halve (rounded up), large counts lose 1/16, so old bad
+   luck decays away and cannot freeze a weapon permanently (the 0/3
+   lockout), while a proven record (hundreds of samples) moves only
+   ~6% per map. 0 stays 0. */
+static int BotMem_DecayInt( int c ) {
+	if ( c <= 0 ) return 0;
+	if ( c < 16 ) return (c + 1) >> 1;
+	return c - (c >> 4);
+}
+
+/* 2026-11-12 (dwc.4, issue #6): decay ALL six counter arrays (all 32
+   slots, map end, before the per-bot save). Sizes: bgood/bbad 8192
+   (32 x 256 goals), bg/bb 3072 (32 x 32 classnames x 3 bands),
+   fgood/fbad 864 (32 x 9 weapons x 3 bands). */
+static void BotMem_DecayCounters( void ) {
+	int i;
+
+	for ( i = 0; i < 8192; i++ ) {
+		botmem_bgood[i] = BotMem_DecayInt( botmem_bgood[i] );
+		botmem_bbad[i] = BotMem_DecayInt( botmem_bbad[i] );
+	}
+	for ( i = 0; i < 3072; i++ ) {
+		botmem_bg[i] = BotMem_DecayInt( botmem_bg[i] );
+		botmem_bb[i] = BotMem_DecayInt( botmem_bb[i] );
+	}
+	for ( i = 0; i < 864; i++ ) {
+		botmem_fgood[i] = BotMem_DecayInt( botmem_fgood[i] );
+		botmem_fbad[i] = BotMem_DecayInt( botmem_fbad[i] );
+	}
+}
+
+/* 2026-11-12 (dwc.4, weapon pickup rule): is this goal classname a
+   weapon pickup (AAS item "weapon_*") EXCEPT the machinegun (the base
+   weapon - picking it up is never an upgrade) and the gauntlet (no map
+   item, and the issue-#6 lockout victim - it must stay out of the
+   fight counters too)? Live goalmap dumps show exactly:
+   weapon_shotgun / weapon_grenadelauncher / weapon_rocketlauncher /
+   weapon_lightning / weapon_railgun / weapon_plasmagun (no BFG on the
+   live maps; the check would cover weapon_bfg anyway). */
+static int BotMem_IsWeaponPickup( char *name ) {
+	if ( name == 0 ) return 0;
+	if ( name[0] != 'w' || name[1] != 'e' || name[2] != 'a' || name[3] != 'p' || name[4] != 'o' || name[5] != 'n' || name[6] != '_' ) return 0;
+	if ( BotMem_StrCmp( name, "weapon_machinegun" ) == 0 ) return 0;
+	if ( BotMem_StrCmp( name, "weapon_gauntlet" ) == 0 ) return 0;
+	return 1;
+}
+
+/* 2026-11-12 (dwc.4): does this goal classname get the FIXED boost
+   (botmem_parmboost) instead of the learned scale? Two paths: the
+   per-map cvar tactic list (dwc.3 behavior, kept as an override) or the
+   built-in weapon pickup rule (botmem_weapon_rule, default on). */
+static int BotMem_NeedsFixedBoost( char *name ) {
+	if ( name == 0 || name[0] == 0 ) return 0;
+	if ( BotMem_IsParamount( name ) != 0 ) return 1;
+	if ( botmem_weapon_rule != 0 && BotMem_IsWeaponPickup( name ) != 0 ) return 1;
+	return 0;
+}
+
+/* 2026-11-12 (dwc.4, weapon pickup rule): is this bot's PENDING goal
+   decision a weapon pickup (for the death exemption)? The classname
+   table (botmem_cnames2) is built lazily by the first BotMem_BotLearn
+   of the map; before that (cnames2n == 0 / goalcn -1) the decision falls
+   through to the normal bad count - the very first decision of a map,
+   not a steady-state case. */
+static int BotMem_IsWeaponGoal( int b ) {
+	int goal, cn;
+
+	if ( b < 0 || b >= 32 ) return 0;
+	goal = botmem_goal[b];
+	if ( goal < 0 || goal >= 256 ) return 0;
+	cn = botmem_goalcn[goal];
+	if ( cn < 0 || cn >= botmem_cnames2n ) return 0;
+	return BotMem_IsWeaponPickup( botmem_cnames2 + cn*32 );
+}
+
+/*
+===============
+BotMem_BotConnect
+
+2026-11-12 (dwc.4): the per-bot learn-file registration, called from
+G_BotConnect (g_bot.c) AFTER a successful BotAISetupClient - for fresh
+rcon adds AND for the engine's firstTime=qfalse ClientConnect re-run
+after every map change (the game VM restarts, so the name table and the
+file load must be redone per map). The botfile name is derived from the
+client's "characterfile" userinfo key (set by G_AddBot from the bots.txt
+aifile, e.g. "bots/dwcbot1_c.c" -> "dwcbot1"): the BASENAME minus the
+"_c.c" suffix, normalized to [a-zA-Z0-9]. The display name (funname,
+color codes, addbot altname) is NOT the identity - it is cosmetic.
+
+First slot of a name = BASE: loads the (map,bot) file into the (zero)
+slot. A later slot with the same name = DELTA: keeps its slot zeroed
+(see botmem_loadflag). The in-memory counters stay slot-indexed; only
+the file I/O is name-keyed.
+===============
+*/
+void BotMem_BotConnect( int clientnum, const char *characterfile ) {
+	char name[32];
+	const char *p;
+	int i, n, c, j, isbase;
+
+	if ( botmem_enabled == 0 ) return;
+	if ( clientnum < 0 || clientnum >= 32 ) return;
+	if ( characterfile == 0 ) characterfile = "";
+	/* basename after the last '/' */
+	p = characterfile;
+	for ( i = 0; characterfile[i] != 0; i++ ) {
+		if ( characterfile[i] == '/' ) p = characterfile + i + 1;
+	}
+	/* strip the "_c.c" aifile suffix (bots/<name>_c.c) */
+	for ( i = 0; p[i] != 0; i++ ) { }
+	if ( i >= 4 && p[i-4] == '_' && p[i-3] == 'c' && p[i-2] == '.' && p[i-1] == 'c' ) {
+		i = i - 4;
+	}
+	/* keep [a-zA-Z0-9], max 31 chars */
+	n = 0;
+	for ( j = 0; j < i && n < 31; j++ ) {
+		c = p[j];
+		if ( (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ) name[n] = c, n = n + 1;
+	}
+	name[n] = 0;
+	if ( n == 0 ) return;
+	for ( i = 0; i < 31; i++ ) {
+		botmem_botfile[clientnum][i] = (i < n) ? name[i] : 0;
+	}
+	/* fresh slot (MapStart / a previous flush cleared it) - make it
+	   explicit so a slot reuse can never carry foreign counters into the
+	   file load */
+	BotMem_ClearSlot( clientnum );
+	botmem_loadflag[clientnum] = 0;
+	isbase = 1;
+	for ( j = 0; j < 32; j++ ) {
+		if ( j == clientnum ) continue;
+		if ( botmem_botfile[j][0] == 0 ) continue;
+		if ( BotMem_SameName( clientnum, j ) ) { isbase = 0; break; }
+	}
+	botmem_loadflag[clientnum] = isbase;
+	if ( isbase != 0 ) {
+		BotMem_LoadLearnBot( clientnum );
+	}
+}
+
+/*
+===============
+BotMem_BotDisconnect
+
+2026-11-12 (dwc.4): called from ClientDisconnect (g_client.c). A
+named slot persists its (map,bot) file MID-MAP (a kicked bot must not
+lose its learning until the next map end), then the slot is cleared so
+the next occupant starts fresh. FlushSlot folds the file in for delta
+slots (the base may already have saved it). Idempotent: after the
+flush the slot is unnamed, and the map-end path (BotMem_MapEnd ->
+BotMem_SaveAllBots) already cleared everything, so the engine's
+disconnect calls after map end are no-ops.
+===============
+*/
+void BotMem_BotDisconnect( int clientnum ) {
+	if ( botmem_enabled == 0 ) return;
+	if ( clientnum < 0 || clientnum >= 32 ) return;
+	if ( botmem_botfile[clientnum][0] == 0 ) return;
+	BotMem_FlushSlot( clientnum );
 }
 
 static void BotMem_BotGoalCount( int botnum, int goal, int isgood ) {
@@ -1110,8 +1540,10 @@ static void BotMem_DesiredScale( int bi, int cn2, int band, float *out ) {
    BotMem_Frame (at most 1x/s: RATIO on the last-applied scale - the
    engine weight config is static per bot, so the QVM must re-push when
    the desired scale changes, e.g. the bot's health band changed).
-   Paramount classnames are skipped (their fixed boost is set by the
-   paramount pass in BotMem_BotLearn). No printing here: this runs
+   Fixed-boost classnames (the cvar paramount list and, dwc.4, the
+   built-in weapon pickup rule - BotMem_NeedsFixedBoost) are skipped:
+   their fixed boost is set by the dedicated pass in BotMem_BotLearn.
+   No printing here: this runs
    every second from the frame loop. */
 static void BotMem_ApplyScales( int bi, int goalstate ) {
 	int cn, last, lfp;
@@ -1121,7 +1553,7 @@ static void BotMem_ApplyScales( int bi, int goalstate ) {
 	if ( goalstate == 0 ) return;
 	if ( botmem_cnames2n == 0 ) return;
 	for ( cn = 0; cn < botmem_cnames2n; cn++ ) {
-		if ( BotMem_IsParamount( botmem_cnames2 + cn*32 ) != 0 ) continue;
+		if ( BotMem_NeedsFixedBoost( botmem_cnames2 + cn*32 ) != 0 ) continue;
 		wantf = 1.0f;
 		BotMem_DesiredScale( bi, cn, BotMem_HealthBand( bi ), &wantf );
 		last = botmem_last[bi*32 + cn];
@@ -1335,7 +1767,7 @@ void BotMem_BotLearn( bot_state_t *bs ) {
 	/* 2026-11-04: the learn lines are collection output -> gated on
 	   bot_learn_enable */
 	if ( en != 0 ) for ( j = 0; j < botmem_cnames2n; j++ ) {
-		if ( BotMem_IsParamount( botmem_cnames2 + j*32 ) != 0 ) continue;
+		if ( BotMem_NeedsFixedBoost( botmem_cnames2 + j*32 ) != 0 ) continue;
 		good = 0;
 		bad = 0;
 		for ( g = 0; g < 256; g++ ) {
@@ -1388,12 +1820,18 @@ void BotMem_BotLearn( bot_state_t *bs ) {
 	   runs, no COW happens, the counter is unchanged, and latching it
 	   prevents a re-run of the (empty) pass on every decision. */
 	if ( us != 0 ) BotMem_ApplyScales( bi, goalstate );
-	/* paramount map-tactic goals: fixed boost (botmem_parmboost) on the
-	   unscaled weight, regardless of this bot's learned good/bad counts.
-	   Runs after the learned pass and on the untouched weight, so it
-	   overrides suppression; classnames absent from the weight config are
-	   no-ops in the engine. 2026-11-04: gated on bot_learn_use. */
-	if ( us != 0 ) for ( j = 0; j < botmem_parmn; j++ ) {
+	/* 2026-11-12 (dwc.4): the fixed-boost pass - every goal classname
+	   that needs the fixed boost (the per-map cvar tactic list, or the
+	   built-in weapon pickup rule - BotMem_NeedsFixedBoost) gets
+	   botmem_parmboost on the untouched weight, regardless of this bot's
+	   learned good/bad counts. It iterates the MAP's classname table (not
+	   the cvar list): a name absent from this map's weight config is no
+	   longer printed or scaled (the dwc.3 phantom P lines, where the cvar
+	   list printed even for maps without the item, are gone). Runs after
+	   the learned pass, so it overrides suppression. 2026-11-04: gated on
+	   bot_learn_use. */
+	if ( us != 0 ) for ( j = 0; j < botmem_cnames2n; j++ ) {
+		if ( BotMem_NeedsFixedBoost( botmem_cnames2 + j*32 ) == 0 ) continue;
 		m = msg;
 		memcpy( m, "botmem learn bot=", 17 );
 		m += 17;
@@ -1403,22 +1841,17 @@ void BotMem_BotLearn( bot_state_t *bs ) {
 		*m++ = ' '; *m++ = 'g'; *m++ = 's'; *m++ = '=';
 		m += BotMem_Int( m, goalstate );
 		*m++ = ' '; *m++ = 'i'; *m++ = 't'; *m++ = 'e'; *m++ = 'm'; *m++ = '=';
-		for ( k = 0; botmem_parm[j*32+k] != 0 && (m - msg) < 100; k++ ) *m++ = botmem_parm[j*32+k];
+		for ( k = 0; botmem_cnames2[j*32+k] != 0 && (m - msg) < 100; k++ ) *m++ = botmem_cnames2[j*32+k];
 		*m++ = ' '; *m++ = 'P';
 		*m++ = ' '; *m++ = 's'; *m++ = 'c'; *m++ = 'a'; *m++ = 'l'; *m++ = 'e'; *m++ = '=';
 		m += BotMem_Float2( m, (float)botmem_parmboost );
 		*m++ = '\n';
 		*m = 0;
 		G_Printf( "%s", msg );
-		trap_BotScaleGoalWeight( goalstate, botmem_parm + j*32, (float)botmem_parmboost );
-		/* 2026-11-03: track the applied scale for this classname so the
-		   Frame re-apply (which skips paramount goals) knows the last value */
-		for ( k = 0; k < botmem_cnames2n; k++ ) {
-			if ( BotMem_StrCmp( botmem_cnames2 + k*32, botmem_parm + j*32 ) == 0 ) {
-				botmem_last[bi*32 + k] = BotMem_FbitsI( (float)botmem_parmboost ) + 1;
-				break;
-			}
-		}
+		trap_BotScaleGoalWeight( goalstate, botmem_cnames2 + j*32, (float)botmem_parmboost );
+		/* track the applied scale so the Frame re-apply (which skips
+		   fixed-boost goals) knows the last value */
+		botmem_last[bi*32 + j] = BotMem_FbitsI( (float)botmem_parmboost ) + 1;
 	}
 	/* Latch AFTER the scale pass: the first trap_BotScaleGoalWeight COWs the
 	   shared weight config (weightconfig_owned 0->1), replacing
@@ -1506,11 +1939,39 @@ void BotMem_InitGame( void ) {
 	botmem_fthresh = trap_Cvar_VariableIntegerValue( "botmem_fight_threshold" );
 	if ( botmem_fthresh < 0 ) botmem_fthresh = 0;
 	if ( botmem_fthresh > 100 ) botmem_fthresh = 100;
+	/* 2026-11-12 (dwc.4, issue #6): botmem_fight_goodmin - a combat weapon
+	   can only be REJECTED once it has at least this many GOOD samples
+	   (below: "unproven", never "bad" - the 0/3 lockout of issue #6).
+	   Default 3. Subordinate to bot_memory. */
+	trap_Cvar_Register( 0, "botmem_fight_goodmin", "3", 0 );
+	botmem_fgoodmin = trap_Cvar_VariableIntegerValue( "botmem_fight_goodmin" );
+	if ( botmem_fgoodmin < 0 ) botmem_fgoodmin = 0;
+	/* 2026-11-12 (dwc.4, issue #6): botmem_decay - at every map end,
+	   before the per-bot learn-file save, all counter cells decay (small
+	   counts halve, large counts -1/16) so old bad luck cannot freeze a
+	   weapon permanently. 1 = on (default), 0 = off. */
+	trap_Cvar_Register( 0, "botmem_decay", "1", 0 );
+	botmem_decay = trap_Cvar_VariableIntegerValue( "botmem_decay" );
+	if ( botmem_decay < 0 ) botmem_decay = 0;
+	if ( botmem_decay > 1 ) botmem_decay = 1;
+	/* 2026-11-12 (dwc.4, weapon pickup rule): botmem_weapon_rule - built-in
+	   rule: every weapon pickup goal (weapon_*, except machinegun/gauntlet)
+	   gets the fixed botmem_parmboost instead of the learned scale, and a
+	   death after such a pickup is exempt from the bad count (.mem tag
+	   "wskip"). 1 = on (default), 0 = the dwc.3 behavior (then only the
+	   per-map botmem_paramount_<map> cvar lists give fixed boosts). */
+	trap_Cvar_Register( 0, "botmem_weapon_rule", "1", 0 );
+	botmem_weapon_rule = trap_Cvar_VariableIntegerValue( "botmem_weapon_rule" );
+	if ( botmem_weapon_rule < 0 ) botmem_weapon_rule = 0;
+	if ( botmem_weapon_rule > 1 ) botmem_weapon_rule = 1;
 	/* MapStart first: it reads the mapname cvar into botmem_map, which
-	   LoadLearn needs for the per-map learn file name (learn_<map>.txt) and
-	   ParamountLoad for the per-map tactic cvar name */
+	   the per-bot learn-file names (BotMem_LearnBotPath) and
+	   ParamountLoad need. 2026-11-12 (dwc.4): the learn-file load moved
+	   from here (the whole-map BotMem_LoadLearn) to BotMem_BotConnect -
+	   each bot loads its OWN (map,bot) file when it connects (fresh adds
+	   AND the post-map-change reconnect), because BSS is zeroed on the
+	   per-map VM restart. */
 	BotMem_MapStart();
-	BotMem_LoadLearn();
 	BotMem_ParamountLoad();
 }
 

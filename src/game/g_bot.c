@@ -565,6 +565,12 @@ qboolean G_BotConnect( int clientNum, qboolean restart ) {
 		return qfalse;
 	}
 
+	// OSP 1.04b botmem (dwc.4): register the bot's learn-file identity
+	// (botfile name from the characterfile) + load its (map,bot) file.
+	// Fires for fresh adds AND the firstTime=qfalse reconnect after
+	// every map change (the VM restart zeroes the botmem BSS).
+	BotMem_BotConnect( clientNum, settings.characterfile );
+
 	return qtrue;
 }
 

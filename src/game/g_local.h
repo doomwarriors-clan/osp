@@ -1407,6 +1407,14 @@ void	BotMem_BotLearn( struct bot_state_s *bs );
 void	BotMem_LogDecision( struct bot_state_s *bs, int kind );
 void	BotMem_FightWeapon( struct bot_state_s *bs );
 int		BotMem_FightGate( int botnum, int weapon );
+// 2026-11-12 (dwc.4): per-bot learn-file registration - BotMem_BotConnect
+// is called from G_BotConnect (fresh adds AND the post-map-change
+// reconnect): stores the botfile name (parsed from the characterfile
+// userinfo key) and loads the bot's (map,bot) v4 learn file;
+// BotMem_BotDisconnect is called from ClientDisconnect: persists the
+// file mid-map and clears the slot.
+void	BotMem_BotConnect( int clientnum, const char *characterfile );
+void	BotMem_BotDisconnect( int clientnum );
 
 // OSP's freeze tag is team deathmatch with server_freezetag set (the
 // expansion is visible in AddScore's code)
