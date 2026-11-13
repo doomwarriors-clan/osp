@@ -1489,6 +1489,12 @@ void ClientDisconnect( int clientNum ) {
 	gentity_t	*ent;
 	int			team;
 
+	// OSP 1.04b botmem (dwc.4): persist the bot's (map,bot) learn file
+	// mid-map (a kicked bot must not lose its learning until map end),
+	// then clear its slot. No-op for humans / unnamed slots / after the
+	// map-end save (BotMem_MapEnd -> BotMem_SaveAllBots cleared it).
+	BotMem_BotDisconnect( clientNum );
+
 	// cleanup if we are kicking a bot that
 	// hasn't spawned yet
 	G_RemoveQueuedBotBegin( clientNum );
